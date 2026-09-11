@@ -41,6 +41,12 @@ export default app;
 
 The host owns auth and passes an opaque `subjectRef`. Time is server-sourced.
 
+**Host rules (do not skip):**
+
+- Never take `limit` or `amount` from the end-user. The host supplies them.
+- `consume` is not idempotent. Wrap retries with `@vllnt/convex-idempotency`.
+- `refund` is a privileged host operation, not a client-facing undo.
+
 ## Author
 
 Maintained by [bntvllnt](https://github.com/bntvllnt) · [bntvllnt.com](https://bntvllnt.com)

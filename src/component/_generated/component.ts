@@ -49,7 +49,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
       eraseSubject: FunctionReference<
         "mutation",
         "internal",
-        { scope: string; subjectRef: string },
+        { batch?: number; scope: string; subjectRef: string },
         number,
         Name
       >;

@@ -11,7 +11,7 @@ import type {
   RemainingState,
   WindowSpec,
 } from "./types.js";
-import { DEFAULT_SCOPE } from "../shared.js";
+import { DEFAULT_ERASE_BATCH, DEFAULT_SCOPE } from "../shared.js";
 
 export interface QuotaComponent {
   mutations: {
@@ -19,32 +19,32 @@ export interface QuotaComponent {
       "mutation",
       "internal",
       {
-        subjectRef: string;
-        key: string;
-        scope: string;
-        limit: number;
         amount: number;
+        key: string;
+        limit: number;
+        scope: string;
+        subjectRef: string;
         window: WindowSpec;
       },
       ConsumeResult
+    >;
+    eraseSubject: FunctionReference<
+      "mutation",
+      "internal",
+      { batch?: number; scope: string; subjectRef: string },
+      number
     >;
     refund: FunctionReference<
       "mutation",
       "internal",
       {
-        subjectRef: string;
-        key: string;
-        scope: string;
         amount: number;
+        key: string;
         periodKey: string;
+        scope: string;
+        subjectRef: string;
       },
       RefundResult
-    >;
-    eraseSubject: FunctionReference<
-      "mutation",
-      "internal",
-      { subjectRef: string; scope: string },
-      number
     >;
   };
   queries: {
@@ -52,10 +52,10 @@ export interface QuotaComponent {
       "query",
       "internal",
       {
-        subjectRef: string;
         key: string;
-        scope: string;
         limit: number;
+        scope: string;
+        subjectRef: string;
         window: WindowSpec;
       },
       RemainingState
@@ -80,7 +80,8 @@ interface RunMutationCtx {
 /**
  * Consumer-facing client for the scheduled-reset quota ledger. The host owns
  * auth and meaning; it passes an opaque `subjectRef` + `key` and a window spec.
- * Time is server-sourced inside the component.
+ * Never take `limit` from an end-user. Time is server-sourced. Consume is not
+ * idempotent — wrap with `@vllnt/convex-idempotency` if retries must not double-count.
  */
 export class Quota {
   private readonly defaultScope: string;
@@ -105,11 +106,11 @@ export class Quota {
     opts: ConsumeOptions = {},
   ): Promise<ConsumeResult> {
     return ctx.runMutation(this.component.mutations.consume, {
-      subjectRef,
-      key,
-      scope: this.scopeOf(opts.scope),
-      limit,
       amount: opts.amount ?? 1,
+      key,
+      limit,
+      scope: this.scopeOf(opts.scope),
+      subjectRef,
       window,
     });
   }
@@ -123,10 +124,10 @@ export class Quota {
     scope?: string,
   ): Promise<RemainingState> {
     return ctx.runQuery(this.component.queries.remaining, {
-      subjectRef,
       key,
-      scope: this.scopeOf(scope),
       limit,
+      scope: this.scopeOf(scope),
+      subjectRef,
       window,
     });
   }
@@ -140,11 +141,11 @@ export class Quota {
     scope?: string,
   ): Promise<RefundResult> {
     return ctx.runMutation(this.component.mutations.refund, {
-      subjectRef,
-      key,
-      scope: this.scopeOf(scope),
       amount,
+      key,
       periodKey,
+      scope: this.scopeOf(scope),
+      subjectRef,
     });
   }
 
@@ -152,10 +153,12 @@ export class Quota {
     ctx: RunMutationCtx,
     subjectRef: string,
     scope?: string,
+    batch?: number,
   ): Promise<number> {
     return ctx.runMutation(this.component.mutations.eraseSubject, {
-      subjectRef,
+      batch,
       scope: this.scopeOf(scope),
+      subjectRef,
     });
   }
 }

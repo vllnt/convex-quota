@@ -1,6 +1,11 @@
 import { ConvexError, v } from "convex/values";
 import { query } from "./_generated/server";
-import { interpretWindowError, resolveWindow, type WindowSpec } from "../shared";
+import {
+  interpretWindowError,
+  resolveWindow,
+  type ResolvedWindow,
+  type WindowSpec,
+} from "../shared";
 import { remainingState, windowSpec } from "./validators";
 
 function fail(code: string, message: string): never {
@@ -10,7 +15,7 @@ function fail(code: string, message: string): never {
 function currentWindow(
   spec: WindowSpec,
   rollingStartAt: number | undefined,
-): ReturnType<typeof resolveWindow> {
+): ResolvedWindow {
   try {
     return resolveWindow(Date.now(), spec, rollingStartAt);
   } catch (error) {
@@ -21,10 +26,10 @@ function currentWindow(
 
 export const remaining = query({
   args: {
-    subjectRef: v.string(),
     key: v.string(),
-    scope: v.string(),
     limit: v.number(),
+    scope: v.string(),
+    subjectRef: v.string(),
     window: windowSpec,
   },
   returns: remainingState,
@@ -32,19 +37,25 @@ export const remaining = query({
     const row = await ctx.db
       .query("allowances")
       .withIndex("by_scope_subject_key", (q) =>
-        q.eq("scope", args.scope).eq("subjectRef", args.subjectRef).eq("key", args.key),
+        q
+          .eq("scope", args.scope)
+          .eq("subjectRef", args.subjectRef)
+          .eq("key", args.key),
       )
-      .unique();
+      .first();
     const rollingStart =
-      row !== null && args.window.kind === "rolling" ? row.windowStartAt : undefined;
+      row !== null && args.window.kind === "rolling"
+        ? row.windowStartAt
+        : undefined;
     const window = currentWindow(args.window, rollingStart);
-    const used = row !== null && row.periodKey === window.periodKey ? row.used : 0;
+    const used =
+      row !== null && row.periodKey === window.periodKey ? row.used : 0;
     return {
-      remaining: Math.max(args.limit - used, 0),
-      used,
       limit: args.limit,
       periodKey: window.periodKey,
+      remaining: Math.max(args.limit - used, 0),
       resetsAt: window.endAt,
+      used,
     };
   },
 });

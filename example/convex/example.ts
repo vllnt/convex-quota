@@ -82,9 +82,13 @@ export const refund = mutation({
 });
 
 export const eraseSubject = mutation({
-  args: { subjectRef: v.string(), scope: v.optional(v.string()) },
+  args: {
+    batch: v.optional(v.number()),
+    scope: v.optional(v.string()),
+    subjectRef: v.string(),
+  },
   returns: v.number(),
-  handler: (ctx, a) => quota.eraseSubject(ctx, a.subjectRef, a.scope),
+  handler: (ctx, a) => quota.eraseSubject(ctx, a.subjectRef, a.scope, a.batch),
 });
 
 export const consumeTenant = mutation({

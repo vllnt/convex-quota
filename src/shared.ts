@@ -5,6 +5,13 @@ export const COMPONENT_NAME = "quota";
 /** Default namespace when the host does not scope an allowance. */
 export const DEFAULT_SCOPE = "global";
 
+/** Opaque refs longer than this are rejected. */
+export const MAX_REF_LENGTH = 256;
+
+/** Default / max rows deleted per erase pass before the sweep reschedules. */
+export const DEFAULT_ERASE_BATCH = 200;
+export const MAX_ERASE_BATCH = 500;
+
 export type CalendarPeriod = "day" | "week" | "month";
 export type WeekStartsOn = "monday" | "sunday";
 
@@ -24,21 +31,13 @@ export type WindowSpec =
       durationMs: number;
     };
 
-export interface ResolvedWindow {
+export type ResolvedWindow = {
   periodKey: string;
   startAt: number;
   endAt: number;
-}
-
-const WEEKDAY: Record<string, number> = {
-  Sun: 0,
-  Mon: 1,
-  Tue: 2,
-  Wed: 3,
-  Thu: 4,
-  Fri: 5,
-  Sat: 6,
 };
+
+const formatterCache = new Map<string, Intl.DateTimeFormat>();
 
 function pad2(value: number): string {
   return value.toString().padStart(2, "0");
@@ -50,51 +49,95 @@ function assertFinitePositive(value: number, code: string, message: string): voi
   }
 }
 
+function formatterFor(timeZone: string): Intl.DateTimeFormat {
+  const cached = formatterCache.get(timeZone);
+  if (cached !== undefined) {
+    return cached;
+  }
+  try {
+    const created = new Intl.DateTimeFormat("en-US", {
+      day: "2-digit",
+      hour: "2-digit",
+      hourCycle: "h23",
+      minute: "2-digit",
+      month: "2-digit",
+      second: "2-digit",
+      timeZone,
+      weekday: "short",
+      year: "numeric",
+    });
+    formatterCache.set(timeZone, created);
+    return created;
+  } catch {
+    throw new Error(`INVALID_TIME_ZONE: ${timeZone}`);
+  }
+}
+
+function partMap(parts: readonly Intl.DateTimeFormatPart[]): Record<string, string> {
+  return parts.reduce<Record<string, string>>((acc, part) => {
+    acc[part.type] = part.value;
+    return acc;
+  }, {});
+}
+
 /**
  * Read calendar parts of `now` in `timeZone`. Throws if `timeZone` is not a
- * valid IANA name (`Intl` RangeError).
+ * valid IANA name.
  */
 export function zonedParts(
   now: number,
   timeZone: string,
 ): {
-  year: number;
-  month: number;
   day: number;
-  weekday: number;
   hour: number;
   minute: number;
+  month: number;
   second: number;
+  weekday: number;
+  year: number;
 } {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    weekday: "short",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(new Date(now));
-  const read = (type: string): string =>
-    parts.find((entry) => entry.type === type)?.value ?? "0";
-  const weekdayName = read("weekday");
-  const weekday = WEEKDAY[weekdayName] ?? 0;
+  const byType = partMap(formatterFor(timeZone).formatToParts(new Date(now)));
+  const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(
+    String(byType.weekday),
+  );
   return {
-    year: Number(read("year")),
-    month: Number(read("month")),
-    day: Number(read("day")),
+    day: Number(byType.day),
+    hour: Number(byType.hour),
+    minute: Number(byType.minute),
+    month: Number(byType.month),
+    second: Number(byType.second),
     weekday,
-    hour: Number(read("hour")),
-    minute: Number(read("minute")),
-    second: Number(read("second")),
+    year: Number(byType.year),
   };
+}
+
+function stepMidnight(
+  guess: number,
+  year: number,
+  month: number,
+  day: number,
+  timeZone: string,
+): number {
+  const parts = zonedParts(guess, timeZone);
+  const asUtc = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+  );
+  const target = Date.UTC(year, month - 1, day);
+  const diff = asUtc - target;
+  if (diff === 0) {
+    return guess;
+  }
+  return guess - diff;
 }
 
 /**
  * UTC ms for local midnight of `year-month-day` in `timeZone`.
- * Iterates the zone offset so DST does not leave the result on the wrong day.
+ * Two offset corrections so DST does not leave the result on the wrong day.
  */
 export function utcMsForLocalMidnight(
   year: number,
@@ -102,25 +145,14 @@ export function utcMsForLocalMidnight(
   day: number,
   timeZone: string,
 ): number {
-  let guess = Date.UTC(year, month - 1, day);
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const parts = zonedParts(guess, timeZone);
-    const asUtc = Date.UTC(
-      parts.year,
-      parts.month - 1,
-      parts.day,
-      parts.hour,
-      parts.minute,
-      parts.second,
-    );
-    const target = Date.UTC(year, month - 1, day);
-    const diff = asUtc - target;
-    if (diff === 0) {
-      break;
-    }
-    guess -= diff;
-  }
-  return guess;
+  const first = Date.UTC(year, month - 1, day);
+  return stepMidnight(
+    stepMidnight(first, year, month, day, timeZone),
+    year,
+    month,
+    day,
+    timeZone,
+  );
 }
 
 function addDays(
@@ -128,12 +160,12 @@ function addDays(
   month: number,
   day: number,
   delta: number,
-): { year: number; month: number; day: number } {
+): { day: number; month: number; year: number } {
   const date = new Date(Date.UTC(year, month - 1, day + delta));
   return {
-    year: date.getUTCFullYear(),
-    month: date.getUTCMonth() + 1,
     day: date.getUTCDate(),
+    month: date.getUTCMonth() + 1,
+    year: date.getUTCFullYear(),
   };
 }
 
@@ -142,13 +174,15 @@ export function isoWeek(
   year: number,
   month: number,
   day: number,
-): { year: number; week: number } {
+): { week: number; year: number } {
   const date = new Date(Date.UTC(year, month - 1, day));
   const thursday = new Date(date);
   thursday.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
   const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(((thursday.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
-  return { year: thursday.getUTCFullYear(), week };
+  const week = Math.ceil(
+    ((thursday.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7,
+  );
+  return { week, year: thursday.getUTCFullYear() };
 }
 
 function sundayWeek(
@@ -156,7 +190,7 @@ function sundayWeek(
   month: number,
   day: number,
   weekday: number,
-): { year: number; week: number } {
+): { week: number; year: number } {
   const start = addDays(year, month, day, -weekday);
   return isoWeek(start.year, start.month, start.day);
 }
@@ -169,34 +203,42 @@ function resolveCalendar(
 ): ResolvedWindow {
   const parts = zonedParts(now, timeZone);
   if (period === "day") {
-    const startAt = utcMsForLocalMidnight(parts.year, parts.month, parts.day, timeZone);
+    const startAt = utcMsForLocalMidnight(
+      parts.year,
+      parts.month,
+      parts.day,
+      timeZone,
+    );
     const next = addDays(parts.year, parts.month, parts.day, 1);
-    const endAt = utcMsForLocalMidnight(next.year, next.month, next.day, timeZone);
     return {
+      endAt: utcMsForLocalMidnight(next.year, next.month, next.day, timeZone),
       periodKey: `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`,
       startAt,
-      endAt,
     };
   }
   if (period === "month") {
     const startAt = utcMsForLocalMidnight(parts.year, parts.month, 1, timeZone);
     const nextMonth = parts.month === 12 ? 1 : parts.month + 1;
     const nextYear = parts.month === 12 ? parts.year + 1 : parts.year;
-    const endAt = utcMsForLocalMidnight(nextYear, nextMonth, 1, timeZone);
     return {
+      endAt: utcMsForLocalMidnight(nextYear, nextMonth, 1, timeZone),
       periodKey: `${parts.year}-${pad2(parts.month)}`,
       startAt,
-      endAt,
     };
   }
   if (weekStartsOn === "sunday") {
     const start = addDays(parts.year, parts.month, parts.day, -parts.weekday);
     const end = addDays(start.year, start.month, start.day, 7);
-    const labeled = sundayWeek(parts.year, parts.month, parts.day, parts.weekday);
+    const labeled = sundayWeek(
+      parts.year,
+      parts.month,
+      parts.day,
+      parts.weekday,
+    );
     return {
+      endAt: utcMsForLocalMidnight(end.year, end.month, end.day, timeZone),
       periodKey: `${labeled.year}-W${pad2(labeled.week)}-sun`,
       startAt: utcMsForLocalMidnight(start.year, start.month, start.day, timeZone),
-      endAt: utcMsForLocalMidnight(end.year, end.month, end.day, timeZone),
     };
   }
   const iso = isoWeek(parts.year, parts.month, parts.day);
@@ -204,9 +246,9 @@ function resolveCalendar(
   const start = addDays(parts.year, parts.month, parts.day, mondayDelta);
   const end = addDays(start.year, start.month, start.day, 7);
   return {
+    endAt: utcMsForLocalMidnight(end.year, end.month, end.day, timeZone),
     periodKey: `${iso.year}-W${pad2(iso.week)}`,
     startAt: utcMsForLocalMidnight(start.year, start.month, start.day, timeZone),
-    endAt: utcMsForLocalMidnight(end.year, end.month, end.day, timeZone),
   };
 }
 
@@ -227,27 +269,31 @@ export function resolveWindow(
       spec.weekStartsOn ?? "monday",
     );
   }
-  assertFinitePositive(spec.durationMs, "INVALID_DURATION", "durationMs must be a positive finite number");
+  assertFinitePositive(
+    spec.durationMs,
+    "INVALID_DURATION",
+    "durationMs must be a positive finite number",
+  );
   if (spec.kind === "epoch") {
     const index = Math.floor(now / spec.durationMs);
     const startAt = index * spec.durationMs;
     return {
+      endAt: startAt + spec.durationMs,
       periodKey: `e${index.toString()}`,
       startAt,
-      endAt: startAt + spec.durationMs,
     };
   }
   if (rollingStartAt !== undefined && now < rollingStartAt + spec.durationMs) {
     return {
+      endAt: rollingStartAt + spec.durationMs,
       periodKey: `r${rollingStartAt.toString()}`,
       startAt: rollingStartAt,
-      endAt: rollingStartAt + spec.durationMs,
     };
   }
   return {
+    endAt: now + spec.durationMs,
     periodKey: `r${now.toString()}`,
     startAt: now,
-    endAt: now + spec.durationMs,
   };
 }
 
@@ -266,4 +312,11 @@ export function interpretWindowError(error: unknown): {
     code: "INVALID_TIME_ZONE",
     message: message.replace(/^INVALID_TIME_ZONE:\s*/, ""),
   };
+}
+
+export function clampEraseBatch(batch: number): number {
+  if (!Number.isInteger(batch) || batch < 1) {
+    throw new Error("INVALID_BATCH: batch must be a positive integer");
+  }
+  return Math.min(batch, MAX_ERASE_BATCH);
 }
