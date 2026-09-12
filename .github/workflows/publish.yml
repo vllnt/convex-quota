@@ -1,0 +1,95 @@
+name: Publish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/publish.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: publish-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality Gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck:ci
+      - run: pnpm test:coverage
+      - run: pnpm build
+
+  canary:
+    name: Publish Canary
+    needs: quality
+    if: github.event_name == 'push' && vars.CANARY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Publish canary
+        run: |
+          sed -i '/_authToken/d' "$NPM_CONFIG_USERCONFIG"
+          unset NODE_AUTH_TOKEN
+          PKG=$(node -p "require('./package.json').name")
+          BASE_VERSION=$(node -p "require('./package.json').version")
+          if [ -n "$(npm view "${PKG}@${BASE_VERSION}" version 2>/dev/null || true)" ]; then
+            BASE_VERSION=$(node -e "const v=require('./package.json').version.split('.').map(Number); console.log(v[0]+'.'+v[1]+'.'+(v[2]+1))")
+          fi
+          SHORT_SHA=$(echo "$GITHUB_SHA" | cut -c1-7)
+          npm version "${BASE_VERSION}-canary.${SHORT_SHA}" --no-git-tag-version --ignore-scripts
+          npx -y npm@11 publish --tag canary --provenance --access public --ignore-scripts
+
+  release:
+    name: Publish Reviewed Version
+    needs: quality
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && vars.RELEASE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      # Version/changelog changes belong in signed, reviewed PRs. This job
+      # never commits, tags, changes versions, or creates GitHub releases.
+      # npm rejects an existing version; see docs/VERIFICATION.md before retrying.
+      - name: Publish reviewed package.json version
+        run: |
+          sed -i '/_authToken/d' "$NPM_CONFIG_USERCONFIG"
+          unset NODE_AUTH_TOKEN
+          npx -y npm@11 publish --tag latest --provenance --access public --ignore-scripts

@@ -1,0 +1,105 @@
+{
+  "name": "@vllnt/convex-quota",
+  "version": "0.1.0",
+  "description": "Scheduled-reset per-subject allowances as a Convex component \u2014 calendar, rolling, or epoch windows with readable remaining",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@9.15.4",
+  "files": [
+    "dist",
+    "src",
+    "docs/API.md",
+    "CHANGELOG.md",
+    "llms.txt",
+    "llms-full.txt"
+  ],
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/client/index.d.ts",
+      "default": "./dist/client/index.js"
+    },
+    "./test": "./src/test.ts",
+    "./_generated/component.js": {
+      "types": "./dist/component/_generated/component.d.ts"
+    },
+    "./_generated/component": {
+      "types": "./dist/component/_generated/component.d.ts"
+    },
+    "./convex.config": {
+      "types": "./dist/component/convex.config.d.ts",
+      "default": "./dist/component/convex.config.js"
+    },
+    "./convex.config.js": {
+      "types": "./dist/component/convex.config.d.ts",
+      "default": "./dist/component/convex.config.js"
+    }
+  },
+  "types": "./dist/client/index.d.ts",
+  "module": "./dist/client/index.js",
+  "scripts": {
+    "build": "tsc --project ./tsconfig.build.json",
+    "build:codegen": "pnpm codegen && pnpm build",
+    "build:clean": "rm -rf dist *.tsbuildinfo && pnpm build:codegen",
+    "typecheck": "tsc --noEmit",
+    "typecheck:ci": "tsc --noEmit && tsc --noEmit --project tsconfig.test.json",
+    "lint": "pnpm check:agents && pnpm check:release && eslint . --max-warnings 0",
+    "test": "vitest run",
+    "test:watch": "vitest --typecheck --clearScreen false",
+    "test:coverage": "vitest run --coverage --coverage.reporter=text",
+    "generate:llms": "node scripts/generate-llms.mjs",
+    "preversion": "pnpm install --frozen-lockfile && pnpm build && pnpm test:coverage && pnpm typecheck && pnpm generate:llms",
+    "canary:first": "node scripts/publish-first-canary.mjs",
+    "check:release": "node scripts/check-release.mjs && node --test scripts/check-first-canary.mjs",
+    "check:pack": "node scripts/check-pack.mjs",
+    "check:agents": "node -e \"const f=require('node:fs');if(!f.existsSync('AGENTS.md')||f.existsSync('CLAUDE.md')||f.existsSync('.claude'))process.exit(1)\"",
+    "codegen": "pnpm convex codegen --component-dir ./src/component"
+  },
+  "peerDependencies": {
+    "convex": "^1.45.0"
+  },
+  "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "@vitest/coverage-v8": "^4.1.11",
+    "@vllnt/eslint-config": "2.0.0",
+    "@vllnt/typescript": "2.0.0",
+    "convex": "^1.45.0",
+    "convex-test": "^0.0.56",
+    "eslint": "^9.39.5",
+    "prettier": "^3.9.6",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
+  },
+  "homepage": "https://github.com/vllnt/convex-quota#readme",
+  "bugs": {
+    "url": "https://github.com/vllnt/convex-quota/issues"
+  },
+  "author": {
+    "name": "bntvllnt",
+    "url": "https://bntvllnt.com"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/bntvllnt"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vllnt/convex-quota"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "keywords": [
+    "convex",
+    "convex-component",
+    "quota",
+    "rate-limit",
+    "allowance"
+  ]
+}
