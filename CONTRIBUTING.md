@@ -52,7 +52,9 @@ Maintainers only:
 - After review and adoption gates clear, dispatch `.github/workflows/publish.yml`
   from `main` with `RELEASE_ENABLED=true` to publish the reviewed package.json
   version. Dispatch never bumps versions, commits, tags, or creates releases.
-- No local publishing fallback. Run `pnpm check:release` to check this contract.
+- No local stable publishing fallback. The explicit [first-canary bootstrap](docs/FIRST_CANARY.md)
+  is the only local publication command; it defaults to dry run and cannot publish stable.
+  Run `pnpm check:release` to check the release contract and bootstrap regressions.
 - For uncertain or failed publication, inspect registry version/provenance before
   retrying; never overwrite a version or bump blindly. See
   [verification and recovery](docs/VERIFICATION.md).
