@@ -22,6 +22,8 @@ Node 26.7.0, pnpm 9.15.4, Convex CLI/client 1.45.0 on Darwin arm64:
   `tsc --ignoreConfig --noEmit --module ESNext --moduleResolution Bundler
   --target ES2024 --skipLibCheck check.ts`; root runtime import also passes.
 
+The tracked `pnpm check:pack` reproduces packed public export and unrelated-host
+schema typing checks in a temporary directory and removes it afterward.
 The tarball consumer resolves Convex, convex-test and Vite from the installed
 locked dependency versions; this is not proof against every compatible version.
 CI uses Node 22. Reproduced on Node 22.23.2 with pnpm 9.15.4:
@@ -46,8 +48,11 @@ The managed-process tool was unavailable; bounded foreground execution supplied
 process-group cleanup. Early SIGTERM shutdown attempts timed out; SIGINT cleanup
 then completed normally, with no listeners remaining on either port.
 
-Observed: 20 concurrent consumes against limit 5 gave exactly five successes and
-stored used=5. A batch-size-2 scheduled erasure drained eight allowance rows while
+Correction after independent review: the original runner used the HTTP client's
+mutation queue, so its Promise.all did not establish concurrent HTTP calls.
+The corrected runner sets `skipQueue: true` and instruments its fetch transport,
+asserting overlapping HTTP requests. Reproduced peak in-flight = 20; exactly five
+allowed and fifteen denied consumes against limit 5, with stored used=5. A batch-size-2 scheduled erasure drained eight allowance rows while
 preserving another scope. A second mount accepted the identical scope/subject/key
 with independent used=1. These are bounded real-backend observations, not a
 proof of all concurrency or scheduler conditions.
@@ -63,7 +68,8 @@ review and adoption gates clear. Stable runs are serialized and not automaticall
 cancelled. Canary runs may cancel. Stable publication uses the already-reviewed
 package.json version; version and changelog changes require a normal signed PR.
 The stable job has read-only repository permissions and never commits, bumps,
-tags or creates GitHub releases. There is no commit-controlled release-note
+tags or creates GitHub releases. Local alpha/release and interactive login scripts
+have been removed. `pnpm check:release`, included in lint, guards these invariants. There is no commit-controlled release-note
 interpolation into shell source.
 
 If publication fails or completion is uncertain, do NOT bump or rerun blindly.

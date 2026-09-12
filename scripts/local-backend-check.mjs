@@ -18,13 +18,25 @@ for (const stream of [child.stdout, child.stderr]) stream.on("data", (chunk) => 
 const deadline = setTimeout(() => { child.kill("SIGTERM"); process.exitCode = 1; }, 120_000);
 try {
   await readiness;
-  const client = new ConvexHttpClient("http://127.0.0.1:3310");
-  const mutation = (name, args) => client.mutation(makeFunctionReference(`example:${name}`), args);
+  let inFlight = 0;
+  let peakInFlight = 0;
+  const client = new ConvexHttpClient("http://127.0.0.1:3310", {
+    fetch: async (...parameters) => {
+      inFlight++;
+      peakInFlight = Math.max(peakInFlight, inFlight);
+      try { return await fetch(...parameters); }
+      finally { inFlight--; }
+    },
+  });
+  const mutation = (name, args) => client.mutation(makeFunctionReference(`example:${name}`), args, { skipQueue: true });
   const query = (args) => client.query(makeFunctionReference("example:remaining"), args);
   const subjectRef = `local-${Date.now()}`;
   const args = { subjectRef, scope: "audit", key: "occ", limit: 5, window: { kind: "rolling", durationMs: 60_000 } };
   const results = await Promise.all(Array.from({ length: 20 }, () => mutation("consume", args)));
+  assert.ok(peakInFlight > 1, `HTTP requests did not overlap: peak=${peakInFlight}`);
   assert.equal(results.filter((r) => r.allowed).length, 5);
+  assert.equal(results.filter((r) => !r.allowed).length, 15);
+  process.stdout.write(`HTTP peak in-flight requests: ${peakInFlight}\n`);
   assert.equal((await query(args)).used, 5);
   const secondary = await mutation("consumeSecondary", args);
   assert.equal(secondary.used, 1);

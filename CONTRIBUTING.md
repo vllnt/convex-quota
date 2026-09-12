@@ -48,8 +48,16 @@ at least one adversarial test (auth-denied, invalid input, boundary).
 
 Maintainers only:
 
-- Preferred: run `.github/workflows/publish.yml` via `workflow_dispatch` for patch/minor/major.
-- Local fallback: `pnpm release` (patch) / `pnpm alpha` (prerelease).
+- Prepare version and changelog changes in a signed, reviewed PR.
+- After review and adoption gates clear, dispatch `.github/workflows/publish.yml`
+  from `main` with `RELEASE_ENABLED=true` to publish the reviewed package.json
+  version. Dispatch never bumps versions, commits, tags, or creates releases.
+- No local publishing fallback. Run `pnpm check:release` to check this contract.
+- For uncertain or failed publication, inspect registry version/provenance before
+  retrying; never overwrite a version or bump blindly. See
+  [verification and recovery](docs/VERIFICATION.md).
+- `pnpm check:pack` builds and checks the packed public exports and test helper
+  against an unrelated host schema using the locked installed dependencies.
 
 ## Reporting Issues
 
