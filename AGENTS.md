@@ -44,3 +44,4 @@ src/
 - No bare `v.any()`.
 - 100% test coverage is BLOCKING.
 - Runtime deps: only official `@convex-dev/*` + `@vllnt/*`.
+- Type-A generated code: `**/_generated/**` is Convex CLI-owned; run `pnpm codegen`.
