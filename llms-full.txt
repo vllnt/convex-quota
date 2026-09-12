@@ -19,8 +19,12 @@ Scheduled-reset per-subject allowances as a Convex component.
 Readable remaining in a window — calendar day/week/month, rolling, or epoch.
 Daily/weekly play caps, free-tier slots, Codex-style limits.
 
-Not a silent 429 (`@convex-dev/rate-limiter`), not billable usage
-(`@vllnt/convex-metering`), not a persistent balance (`@vllnt/convex-wallet`).
+The official `@convex-dev/rate-limiter` already supports fixed windows, token
+buckets, readable status and React hooks. Prefer it for general throttling.
+This experimental component explores the narrower calendar/timezone reset and
+privileged allowance-refund surface. It is not billable metering or a persistent
+balance. Publication remains blocked on demonstrated independent consumers and
+justification of this boundary; readable remaining alone is not a distinction.
 
 ```ts
 const quota = new Quota(components.quota);
@@ -34,10 +38,10 @@ if (!r.allowed) throw new Error(`try again at ${r.resetsAt}`);
 
 ## Features
 
-- **Readable remaining** — `consume` / `remaining` return `{ allowed, used, remaining, limit, periodKey, resetsAt }`.
+- **Readable remaining** — both return `{ used, remaining, limit, periodKey, resetsAt }`; only `consume` includes `allowed`.
 - **Window kinds** — calendar (`day` / `week` / `month` + IANA timezone), rolling (from first consume), epoch (`floor(now / durationMs)`).
 - **Server-sourced time** — window math uses `Date.now()` inside the component.
-- **Opaque refs** — `subjectRef` and `key` are host strings (max 256 chars).
+- **Opaque refs** — `subjectRef`, `key`, and `scope` are host strings (1..256 UTF-16 code units).
 - **Bounded erase** — `eraseSubject` deletes in batches and reschedules until clean.
 - **Scopes** — default `"global"`, or namespace per tenant / product.
 
@@ -47,7 +51,7 @@ if (!r.allowed) throw new Error(`try again at ${r.resetsAt}`);
 pnpm add @vllnt/convex-quota
 ```
 
-Peer dependency: `convex@^1.45.0`.
+Node.js >=22.12.0; peer dependency: `convex@^1.45.0`.
 
 ## Usage
 
@@ -86,7 +90,10 @@ export const play = mutation({
 
 - Never take `limit` or `amount` from the end-user. The host supplies them.
 - `consume` is not idempotent. Wrap retries with `@vllnt/convex-idempotency`.
-- `refund` is a privileged host operation, not a client-facing undo.
+- `refund` is privileged and **not idempotent**. Deduplicate refund events in the host transaction; `periodKey` is a window label, not a receipt or replay token.
+- Keep window policy fixed for each `(scope, subjectRef, key)`; changes throw `POLICY_MISMATCH`. Use a new key for a new policy. Limits may change without resetting usage.
+- Stop new consumes before erasing a subject and keep them stopped until scheduled passes drain. Erasure is not a tombstone; concurrent writes can survive or be swept.
+- The example wrappers are unauthenticated test fixtures, not production endpoints.
 
 ## API Reference
 
@@ -98,6 +105,27 @@ export const play = mutation({
 | `eraseSubject(ctx, subjectRef, scope?, batch?)` | mutation | `number` deleted this pass |
 
 Full reference: [docs/API.md](docs/API.md).
+
+## Multiple mounts
+
+```ts
+app.use(quota, { name: "webQuota" });
+app.use(quota, { name: "mobileQuota" });
+// new Quota(components.webQuota), new Quota(components.mobileQuota)
+```
+
+Each mount has independent sandboxed tables. Use `scope` for runtime namespaces.
+
+## Operational behavior
+
+`remaining` is a snapshot when its query executes: **time passing alone does not
+invalidate a Convex subscription**. Treat `resetsAt` as an expiry hint, not a
+scheduled notification; `consume` always rechecks server time. Rolling windows
+start on the first **allowed** consume. No history or audit events are retained.
+Hosts should record denied decisions and privileged refunds in their own audit
+system without logging sensitive refs. A hot allowance is one contended row;
+different indexed keys remain independent. Monitor Convex OCC retries and
+scheduled-function failures. Erasure returns only its first pass count.
 
 ## React
 
@@ -118,7 +146,8 @@ pnpm test
 pnpm test:coverage
 ```
 
-Tests run against the real component runtime via `convex-test` (`@edge-runtime/vm`).
+Unit/integration tests use the **mock backend** `convex-test` (`@edge-runtime/vm`).
+They do not establish real-backend OCC or scheduler guarantees.
 
 ## Contributing
 
@@ -149,14 +178,27 @@ All notable changes to this project are documented here. The format is based on
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-09-11
-
 ### Added
 
-- First release of `@vllnt/convex-quota`.
+- Initial implementation of `@vllnt/convex-quota` (not yet released).
 - Calendar (day / week / month), rolling, and epoch windows.
 - `consume`, `remaining`, `refund`, `eraseSubject` (batched).
 - Ref length limits (1..256). Server-sourced window math.
+
+### Fixed
+
+- Reject unsafe numeric allowance values, invalid query inputs, unbounded scopes,
+  and overflowing or sub-millisecond durations.
+- Bind each allowance to its window policy and reject policy reinterpretation.
+- Resolve skipped/repeated civil midnights and reject refunds of expired rows.
+- Correct mock-backend testing claims and document refund deduplication,
+  subscription expiry, erasure races, and multi-mount behavior.
+
+### Migration note
+
+- The unreleased allowance schema now requires `policyKey`. Existing development
+  rows must be cleared in an isolated development deployment before updating;
+  no production migration has been performed.
 
 
 ---
@@ -169,45 +211,94 @@ All notable changes to this project are documented here. The format is based on
 
 ```ts
 import { Quota } from "@vllnt/convex-quota";
-
 const quota = new Quota(components.quota, { defaultScope: "global" });
 ```
 
-Time is server-sourced. `subjectRef` and `key` are opaque host strings (1..256 characters).
-Never take `limit` or `amount` from an end-user.
+The host owns authentication, authorization and policy. Never accept identity,
+limit, amount, scope or window policy directly from an untrusted caller.
+`subjectRef`, `key`, `scope`, and refund `periodKey` must be nonempty strings of
+at most 256 UTF-16 code units (`INVALID_REF`). Amounts and limits must be positive
+safe integers (`INVALID_AMOUNT`, `INVALID_LIMIT`). Scope defaults to `"global"`.
+All component errors use `ConvexError({ code, message })`.
 
 ## Windows
 
-- `{ kind: "calendar", period: "day" | "week" | "month", timeZone, weekStartsOn?: "monday" | "sunday" }`
-- `{ kind: "rolling", durationMs }` — window starts at first consume, resets after duration
-- `{ kind: "epoch", durationMs }` — `floor(now / durationMs)` buckets
+- `{ kind: "calendar", period: "day" | "week" | "month", timeZone: string, weekStartsOn?: "monday" | "sunday" }`
+- `{ kind: "rolling", durationMs: number }` — starts at first **allowed** consume.
+- `{ kind: "epoch", durationMs: number }` — Unix epoch-aligned duration buckets.
 
-Invalid time zones throw `INVALID_TIME_ZONE`. Non-positive `durationMs` throws `INVALID_DURATION`.
+Calendar weeks default to Monday. Timezones are validated by `Intl`; invalid
+names throw `INVALID_TIME_ZONE`. Repeated midnight uses the earlier occurrence;
+skipped midnight/date advances through the gap. Days can have 23 or 25 hours.
+Durations must be positive safe integer milliseconds with a safely representable
+end timestamp (`INVALID_DURATION`).
+
+A `(scope, subjectRef, key)` has a fixed window policy. Changing kind, duration,
+calendar period, timezone spelling, or effective week start throws
+`POLICY_MISMATCH`, even after expiry. Use a new key for a new policy. Changing the
+limit does not reset usage. `periodKey` is an opaque window label, not an
+idempotency token; do not parse it or reuse it across keys, scopes, or erased rows.
 
 ## Mutations
 
 ### `consume(ctx, subjectRef, key, limit, window, opts?)`
 
-`opts`: `{ scope?, amount? }` (`amount` default `1`).
-
-Returns `{ allowed, remaining, used, limit, periodKey, resetsAt }`.
-Not idempotent — wrap retries with `@vllnt/convex-idempotency`.
+`opts: { scope?: string; amount?: number }`; amount defaults to 1.
+Returns `{ allowed: boolean, remaining: number, used: number, limit: number,
+periodKey: string, resetsAt: number }`. Denied calls do not write. A lower limit
+can return `used > limit` with zero remaining. Successful calls store the latest
+limit for refund calculations. Not idempotent: deduplicate host event retries
+in the same transaction (e.g. with `@vllnt/convex-idempotency`).
 
 ### `refund(ctx, subjectRef, key, amount, periodKey, scope?)`
 
-Subtracts `amount` (not below 0) when `periodKey` matches the stored window.
-Otherwise `{ refunded: false }`. Privileged host operation.
+Returns `{ refunded: boolean, used: number, remaining: number }` in all cases.
+Subtracts amount, clamped at zero, only if the stored period matches and has not
+expired. Otherwise returns `refunded: false` and the stored row's usage/remaining
+(or zeros if absent); these are not a recomputed current-window allowance.
+Remaining uses the limit from the last successful consume, not a later query or
+denied call. A matching zero-usage row still returns `refunded: true`.
+
+Privileged, **not idempotent**: repeated refunds subtract repeatedly. The host
+must authorize and deduplicate compensation events transactionally. Erasing and
+recreating the same calendar period can reuse a label: old refunds must not be
+replayed against it.
 
 ### `eraseSubject(ctx, subjectRef, scope?, batch?)`
 
-Deletes up to `batch` rows (default 200, max 500) and reschedules until clean.
+Returns the number deleted **this pass**, not the total. Deletes up to batch
+rows (positive integer, default 200, capped at 500; `INVALID_BATCH` otherwise).
+Schedules another pass if full, including a possible final empty pass. Scope is
+always enforced. The host must quiesce writes until scheduled cleanup completes;
+there is no tombstone and a racing consume can survive or be swept. Monitor the
+Convex scheduler for failures. Component mutations are atomic within each pass,
+not across the whole sweep.
 
 ## Queries
 
 ### `remaining(ctx, subjectRef, key, limit, window, scope?)`
 
-Computes the **current** window. A stale row from a previous period reads as
-`used: 0` without a write.
+Returns `{ remaining: number, used: number, limit: number, periodKey: string,
+resetsAt: number }`. Computes the current window when the query runs; an expired
+row reads as zero usage without writing. A query does not start a rolling window.
+Time is server-sourced, but **time passing alone does not invalidate a cached
+query/subscription**. Treat resetsAt as an expiry hint and use consume for the
+authoritative decision. No timer or reset scheduler is installed.
+
+## Isolation and operations
+
+Mount multiple instances with `app.use(quota, { name: "webQuota" })` and
+`app.use(quota, { name: "mobileQuota" })`; each client receives its own generated
+component reference. Runtime scopes isolate indexed reads and erasures inside a
+mount. One row per allowance means hot-key writes contend; different keys are
+independent. No historical usage, receipts, logs or audit trail are stored.
+Host audit instrumentation should avoid exposing opaque refs or sensitive data.
+
+## Testing limits
+
+`pnpm test:coverage` runs convex-test's mock backend, including adversarial
+validation, civil-time transitions and scheduled-batch tests. It is not evidence
+of real Convex OCC retries or real scheduler delivery.
 
 
 ---
@@ -222,37 +313,49 @@ export const COMPONENT_NAME = "quota";
 /** Default namespace when the host does not scope an allowance. */
 export const DEFAULT_SCOPE = "global";
 
-/** Opaque refs longer than this are rejected. */
+/** Length limit for opaque refs. */
 export const MAX_REF_LENGTH = 256;
 
 /** Default / max rows deleted per erase pass before the sweep reschedules. */
 export const DEFAULT_ERASE_BATCH = 200;
 export const MAX_ERASE_BATCH = 500;
 
-export type CalendarPeriod = "day" | "week" | "month";
+export type CalendarPeriod = "day" | "month" | "week";
 export type WeekStartsOn = "monday" | "sunday";
 
 export type WindowSpec =
+  | {
+      durationMs: number;
+      kind: "epoch";
+    }
+  | {
+      durationMs: number;
+      kind: "rolling";
+    }
   | {
       kind: "calendar";
       period: CalendarPeriod;
       timeZone: string;
       weekStartsOn?: WeekStartsOn;
-    }
-  | {
-      kind: "rolling";
-      durationMs: number;
-    }
-  | {
-      kind: "epoch";
-      durationMs: number;
     };
 
 export type ResolvedWindow = {
+  endAt: number;
   periodKey: string;
   startAt: number;
-  endAt: number;
 };
+
+/** Stable policy identity; hosts must use a new key to change window policy. */
+export function windowPolicyKey(spec: WindowSpec): string {
+  return spec.kind === "calendar"
+    ? JSON.stringify([
+        spec.kind,
+        spec.period,
+        spec.timeZone,
+        spec.period === "week" ? (spec.weekStartsOn ?? "monday") : undefined,
+      ])
+    : JSON.stringify([spec.kind, spec.durationMs]);
+}
 
 const formatterCache = new Map<string, Intl.DateTimeFormat>();
 
@@ -260,8 +363,12 @@ function pad2(value: number): string {
   return value.toString().padStart(2, "0");
 }
 
-function assertFinitePositive(value: number, code: string, message: string): void {
-  if (!(value > 0 && Number.isFinite(value))) {
+function assertFinitePositive(
+  value: number,
+  code: string,
+  message: string,
+): void {
+  if (!(value > 0 && Number.isSafeInteger(value))) {
     throw new Error(`${code}:${message}`);
   }
 }
@@ -290,10 +397,12 @@ function formatterFor(timeZone: string): Intl.DateTimeFormat {
   }
 }
 
-function partMap(parts: readonly Intl.DateTimeFormatPart[]): Record<string, string> {
-  return parts.reduce<Record<string, string>>((acc, part) => {
-    acc[part.type] = part.value;
-    return acc;
+function partMap(
+  parts: readonly Intl.DateTimeFormatPart[],
+): Record<string, string> {
+  return parts.reduce<Record<string, string>>((accumulator, part) => {
+    accumulator[part.type] = part.value;
+    return accumulator;
   }, {});
 }
 
@@ -328,11 +437,11 @@ export function zonedParts(
   };
 }
 
+type CivilDate = { day: number; month: number; year: number };
+
 function stepMidnight(
   guess: number,
-  year: number,
-  month: number,
-  day: number,
+  { day, month, year }: CivilDate,
   timeZone: string,
 ): number {
   const parts = zonedParts(guess, timeZone);
@@ -353,29 +462,36 @@ function stepMidnight(
 }
 
 /**
- * UTC ms for local midnight of `year-month-day` in `timeZone`.
- * Two offset corrections so DST does not leave the result on the wrong day.
+ * UTC ms for the start of a civil date. Repeated midnight chooses the earlier
+ * occurrence; a skipped midnight/date advances through the timezone gap.
  */
 export function utcMsForLocalMidnight(
-  year: number,
-  month: number,
-  day: number,
+  { day, month, year }: CivilDate,
   timeZone: string,
 ): number {
   const first = Date.UTC(year, month - 1, day);
-  return stepMidnight(
-    stepMidnight(first, year, month, day, timeZone),
-    year,
-    month,
-    day,
-    timeZone,
+  const corrected = stepMidnight(first, { day, month, year }, timeZone);
+  const candidates = [-86_400_000, 0, 86_400_000].map((delta) =>
+    stepMidnight(corrected + delta, { day, month, year }, timeZone),
   );
+  const exact = candidates.filter((candidate) => {
+    const parts = zonedParts(candidate, timeZone);
+    return (
+      parts.year === year &&
+      parts.month === month &&
+      parts.day === day &&
+      parts.hour === 0 &&
+      parts.minute === 0 &&
+      parts.second === 0
+    );
+  });
+  return exact.length > 0
+    ? Math.min(...exact)
+    : Math.max(corrected, ...candidates);
 }
 
 function addDays(
-  year: number,
-  month: number,
-  day: number,
+  { day, month, year }: CivilDate,
   delta: number,
 ): { day: number; month: number; year: number } {
   const date = new Date(Date.UTC(year, month - 1, day + delta));
@@ -402,95 +518,75 @@ export function isoWeek(
   return { week, year: thursday.getUTCFullYear() };
 }
 
-function sundayWeek(
-  year: number,
-  month: number,
-  day: number,
-  weekday: number,
-): { week: number; year: number } {
-  const start = addDays(year, month, day, -weekday);
-  return isoWeek(start.year, start.month, start.day);
+function resolveWeek(
+  parts: ReturnType<typeof zonedParts>,
+  timeZone: string,
+  weekStartsOn: WeekStartsOn,
+): ResolvedWindow {
+  const sunday = weekStartsOn === "sunday";
+  const mondayDelta = parts.weekday === 0 ? -6 : 1 - parts.weekday;
+  const delta = sunday ? -parts.weekday : mondayDelta;
+  const start = addDays(parts, delta);
+  const end = addDays(start, 7);
+  const labelDate = sunday ? start : parts;
+  const label = isoWeek(labelDate.year, labelDate.month, labelDate.day);
+  return {
+    endAt: utcMsForLocalMidnight(end, timeZone),
+    periodKey: `${label.year.toString()}-W${pad2(label.week)}${sunday ? "-sun" : ""}`,
+    startAt: utcMsForLocalMidnight(start, timeZone),
+  };
 }
 
 function resolveCalendar(
   now: number,
-  period: CalendarPeriod,
-  timeZone: string,
-  weekStartsOn: WeekStartsOn,
+  spec: Extract<WindowSpec, { kind: "calendar" }>,
 ): ResolvedWindow {
+  const { period, timeZone, weekStartsOn } = spec;
   const parts = zonedParts(now, timeZone);
-  if (period === "day") {
-    const startAt = utcMsForLocalMidnight(
-      parts.year,
-      parts.month,
-      parts.day,
-      timeZone,
-    );
-    const next = addDays(parts.year, parts.month, parts.day, 1);
-    return {
-      endAt: utcMsForLocalMidnight(next.year, next.month, next.day, timeZone),
-      periodKey: `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`,
-      startAt,
-    };
-  }
-  if (period === "month") {
-    const startAt = utcMsForLocalMidnight(parts.year, parts.month, 1, timeZone);
-    const nextMonth = parts.month === 12 ? 1 : parts.month + 1;
-    const nextYear = parts.month === 12 ? parts.year + 1 : parts.year;
-    return {
-      endAt: utcMsForLocalMidnight(nextYear, nextMonth, 1, timeZone),
-      periodKey: `${parts.year}-${pad2(parts.month)}`,
-      startAt,
-    };
-  }
-  if (weekStartsOn === "sunday") {
-    const start = addDays(parts.year, parts.month, parts.day, -parts.weekday);
-    const end = addDays(start.year, start.month, start.day, 7);
-    const labeled = sundayWeek(
-      parts.year,
-      parts.month,
-      parts.day,
-      parts.weekday,
-    );
-    return {
-      endAt: utcMsForLocalMidnight(end.year, end.month, end.day, timeZone),
-      periodKey: `${labeled.year}-W${pad2(labeled.week)}-sun`,
-      startAt: utcMsForLocalMidnight(start.year, start.month, start.day, timeZone),
-    };
-  }
-  const iso = isoWeek(parts.year, parts.month, parts.day);
-  const mondayDelta = parts.weekday === 0 ? -6 : 1 - parts.weekday;
-  const start = addDays(parts.year, parts.month, parts.day, mondayDelta);
-  const end = addDays(start.year, start.month, start.day, 7);
+  if (period === "week")
+    return resolveWeek(parts, timeZone, weekStartsOn ?? "monday");
+  const start = period === "day" ? parts : { ...parts, day: 1 };
+  const next =
+    period === "day"
+      ? addDays(parts, 1)
+      : {
+          day: 1,
+          month: parts.month === 12 ? 1 : parts.month + 1,
+          year: parts.month === 12 ? parts.year + 1 : parts.year,
+        };
   return {
-    endAt: utcMsForLocalMidnight(end.year, end.month, end.day, timeZone),
-    periodKey: `${iso.year}-W${pad2(iso.week)}`,
-    startAt: utcMsForLocalMidnight(start.year, start.month, start.day, timeZone),
+    endAt: utcMsForLocalMidnight(next, timeZone),
+    periodKey: `${parts.year.toString()}-${pad2(parts.month)}${period === "day" ? `-${pad2(parts.day)}` : ""}`,
+    startAt: utcMsForLocalMidnight(start, timeZone),
   };
 }
 
 /**
  * Resolve the current window for `spec` at `now`. For `rolling`, pass the
- * stored `windowStartAt` so an in-progress window is reused until it elapses.
+ * stored `windowStartAt` to reuse an in-progress window until it elapses.
  */
+function validateDuration(now: number, durationMs: number): void {
+  assertFinitePositive(
+    durationMs,
+    "INVALID_DURATION",
+    "durationMs must be a positive safe integer",
+  );
+  assertFinitePositive(
+    now + durationMs,
+    "INVALID_DURATION",
+    "window end must be a positive safe integer",
+  );
+}
+
 export function resolveWindow(
   now: number,
   spec: WindowSpec,
   rollingStartAt?: number,
 ): ResolvedWindow {
   if (spec.kind === "calendar") {
-    return resolveCalendar(
-      now,
-      spec.period,
-      spec.timeZone,
-      spec.weekStartsOn ?? "monday",
-    );
+    return resolveCalendar(now, spec);
   }
-  assertFinitePositive(
-    spec.durationMs,
-    "INVALID_DURATION",
-    "durationMs must be a positive finite number",
-  );
+  validateDuration(now, spec.durationMs);
   if (spec.kind === "epoch") {
     const index = Math.floor(now / spec.durationMs);
     const startAt = index * spec.durationMs;
@@ -500,17 +596,14 @@ export function resolveWindow(
       startAt,
     };
   }
-  if (rollingStartAt !== undefined && now < rollingStartAt + spec.durationMs) {
-    return {
-      endAt: rollingStartAt + spec.durationMs,
-      periodKey: `r${rollingStartAt.toString()}`,
-      startAt: rollingStartAt,
-    };
-  }
+  const startAt =
+    rollingStartAt !== undefined && now < rollingStartAt + spec.durationMs
+      ? rollingStartAt
+      : now;
   return {
-    endAt: now + spec.durationMs,
-    periodKey: `r${now.toString()}`,
-    startAt: now,
+    endAt: startAt + spec.durationMs,
+    periodKey: `r${startAt.toString()}`,
+    startAt,
   };
 }
 
@@ -547,43 +640,41 @@ export function clampEraseBatch(batch: number): number {
 ```ts
 /** Public TypeScript surface for the quota client. */
 
-import type { WindowSpec } from "../shared.js";
-
-export type { WindowSpec };
-
-export interface ConsumeResult {
+export type ConsumeResult = {
   allowed: boolean;
-  remaining: number;
-  used: number;
   limit: number;
   periodKey: string;
-  resetsAt: number;
-}
-
-export interface RemainingState {
   remaining: number;
+  resetsAt: number;
   used: number;
+};
+
+export type RemainingState = {
   limit: number;
   periodKey: string;
+  remaining: number;
   resetsAt: number;
-}
+  used: number;
+};
 
-export interface RefundResult {
+export type RefundResult = {
   refunded: boolean;
-  used: number;
   remaining: number;
-}
+  used: number;
+};
 
-export interface QuotaOptions {
+export type QuotaOptions = {
   /** Namespace applied when a call omits `scope`. Default `"global"`. */
   defaultScope?: string;
-}
+};
 
-export interface ConsumeOptions {
-  scope?: string;
+export type ConsumeOptions = {
   /** Units to consume. Default `1`. */
   amount?: number;
-}
+  scope?: string;
+};
+
+export { type WindowSpec } from "../shared.js";
 
 ```
 
@@ -597,6 +688,9 @@ import type {
   FunctionReference,
   FunctionReturnType,
 } from "convex/server";
+
+import { DEFAULT_SCOPE } from "../shared.js";
+
 import type {
   ConsumeOptions,
   ConsumeResult,
@@ -605,9 +699,8 @@ import type {
   RemainingState,
   WindowSpec,
 } from "./types.js";
-import { DEFAULT_ERASE_BATCH, DEFAULT_SCOPE } from "../shared.js";
 
-export interface QuotaComponent {
+export type QuotaComponent = {
   mutations: {
     consume: FunctionReference<
       "mutation",
@@ -655,21 +748,21 @@ export interface QuotaComponent {
       RemainingState
     >;
   };
-}
+};
 
-interface RunQueryCtx {
-  runQuery<Q extends FunctionReference<"query", "internal">>(
-    reference: Q,
-    args: FunctionArgs<Q>,
-  ): Promise<FunctionReturnType<Q>>;
-}
+type RunQueryCtx = {
+  runQuery<TQuery extends FunctionReference<"query", "internal">>(
+    reference: TQuery,
+    arguments_: FunctionArgs<TQuery>,
+  ): Promise<FunctionReturnType<TQuery>>;
+};
 
-interface RunMutationCtx {
-  runMutation<M extends FunctionReference<"mutation", "internal">>(
-    reference: M,
-    args: FunctionArgs<M>,
-  ): Promise<FunctionReturnType<M>>;
-}
+type RunMutationCtx = {
+  runMutation<TMutation extends FunctionReference<"mutation", "internal">>(
+    reference: TMutation,
+    arguments_: FunctionArgs<TMutation>,
+  ): Promise<FunctionReturnType<TMutation>>;
+};
 
 /**
  * Consumer-facing client for the scheduled-reset quota ledger. The host owns
@@ -691,24 +784,26 @@ export class Quota {
     return scope ?? this.defaultScope;
   }
 
+  // eslint-disable-next-line max-params -- Preserve the published positional client contract.
   consume(
     ctx: RunMutationCtx,
     subjectRef: string,
     key: string,
     limit: number,
     window: WindowSpec,
-    opts: ConsumeOptions = {},
+    options: ConsumeOptions = {},
   ): Promise<ConsumeResult> {
     return ctx.runMutation(this.component.mutations.consume, {
-      amount: opts.amount ?? 1,
+      amount: options.amount ?? 1,
       key,
       limit,
-      scope: this.scopeOf(opts.scope),
+      scope: this.scopeOf(options.scope),
       subjectRef,
       window,
     });
   }
 
+  // eslint-disable-next-line max-params -- Preserve the published positional client contract.
   remaining(
     ctx: RunQueryCtx,
     subjectRef: string,
@@ -726,6 +821,7 @@ export class Quota {
     });
   }
 
+  // eslint-disable-next-line max-params -- Preserve the published positional client contract.
   refund(
     ctx: RunMutationCtx,
     subjectRef: string,
@@ -743,6 +839,7 @@ export class Quota {
     });
   }
 
+  // eslint-disable-next-line max-params -- Preserve the published positional client contract.
   eraseSubject(
     ctx: RunMutationCtx,
     subjectRef: string,
@@ -757,14 +854,14 @@ export class Quota {
   }
 }
 
-export type {
-  ConsumeOptions,
-  ConsumeResult,
-  QuotaOptions,
-  RefundResult,
-  RemainingState,
-  WindowSpec,
-};
+export {
+  type ConsumeOptions,
+  type ConsumeResult,
+  type QuotaOptions,
+  type RefundResult,
+  type RemainingState,
+  type WindowSpec,
+} from "./types.js";
 
 ```
 
@@ -778,20 +875,21 @@ import { v } from "convex/values";
 
 /**
  * Sandboxed tables — the quota ledger's own concern. `subjectRef`, `key`, and
- * `scope` are opaque host-owned strings. The row is the current window only;
+ * `scope` are opaque host-owned strings. The row stores the current window;
  * a new period overwrites `used` in place (no history table).
  */
 export default defineSchema({
   allowances: defineTable({
-    subjectRef: v.string(),
     key: v.string(),
-    scope: v.string(),
     limit: v.number(),
-    used: v.number(),
     periodKey: v.string(),
-    windowStartAt: v.number(),
-    windowEndAt: v.number(),
+    policyKey: v.string(),
+    scope: v.string(),
+    subjectRef: v.string(),
     updatedAt: v.number(),
+    used: v.number(),
+    windowEndAt: v.number(),
+    windowStartAt: v.number(),
   }).index("by_scope_subject_key", ["scope", "subjectRef", "key"]),
 });
 
@@ -802,7 +900,43 @@ export default defineSchema({
 ## src/component/validators.ts
 
 ```ts
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
+
+import { MAX_REF_LENGTH } from "../shared";
+
+export function requireRef(value: string, name: string): void {
+  if (value.length === 0 || value.length > MAX_REF_LENGTH) {
+    throw new ConvexError({
+      code: "INVALID_REF",
+      message: `${name} must be 1..${MAX_REF_LENGTH.toString()} UTF-16 code units`,
+    });
+  }
+}
+
+export function requirePositiveInt(
+  value: number,
+  name: string,
+  code: string,
+): void {
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new ConvexError({
+      code,
+      message: `${name} must be a positive safe integer`,
+    });
+  }
+}
+
+export function requireAllowanceInput(input: {
+  key: string;
+  limit: number;
+  scope: string;
+  subjectRef: string;
+}): void {
+  requireRef(input.subjectRef, "subjectRef");
+  requireRef(input.key, "key");
+  requireRef(input.scope, "scope");
+  requirePositiveInt(input.limit, "limit", "INVALID_LIMIT");
+}
 
 export const calendarPeriod = v.union(
   v.literal("day"),
@@ -820,40 +954,40 @@ export const windowSpec = v.union(
     weekStartsOn: v.optional(weekStartsOn),
   }),
   v.object({
-    kind: v.literal("rolling"),
     durationMs: v.number(),
+    kind: v.literal("rolling"),
   }),
   v.object({
-    kind: v.literal("epoch"),
     durationMs: v.number(),
+    kind: v.literal("epoch"),
   }),
 );
 
 export const consumeResult = v.union(
   v.object({
     allowed: v.literal(true),
-    remaining: v.number(),
-    used: v.number(),
     limit: v.number(),
     periodKey: v.string(),
+    remaining: v.number(),
     resetsAt: v.number(),
+    used: v.number(),
   }),
   v.object({
     allowed: v.literal(false),
-    remaining: v.number(),
-    used: v.number(),
     limit: v.number(),
     periodKey: v.string(),
+    remaining: v.number(),
     resetsAt: v.number(),
+    used: v.number(),
   }),
 );
 
 export const remainingState = v.object({
-  remaining: v.number(),
-  used: v.number(),
   limit: v.number(),
   periodKey: v.string(),
+  remaining: v.number(),
   resetsAt: v.number(),
+  used: v.number(),
 });
 
 ```
@@ -864,34 +998,30 @@ export const remainingState = v.object({
 
 ```ts
 import { ConvexError, v } from "convex/values";
-import { api } from "./_generated/api";
-import type { Doc } from "./_generated/dataModel";
-import { mutation, type MutationCtx } from "./_generated/server";
+
 import {
   DEFAULT_ERASE_BATCH,
-  MAX_ERASE_BATCH,
   interpretWindowError,
-  MAX_REF_LENGTH,
-  resolveWindow,
+  MAX_ERASE_BATCH,
   type ResolvedWindow,
+  resolveWindow,
+  windowPolicyKey,
   type WindowSpec,
 } from "../shared";
-import { consumeResult, windowSpec } from "./validators";
+
+import { api } from "./_generated/api";
+import type { Doc as Document_ } from "./_generated/dataModel";
+import { mutation, type MutationCtx } from "./_generated/server";
+import {
+  consumeResult,
+  requireAllowanceInput,
+  requirePositiveInt,
+  requireRef,
+  windowSpec,
+} from "./validators";
 
 function fail(code: string, message: string): never {
   throw new ConvexError({ code, message });
-}
-
-function requireRef(value: string, name: string): void {
-  if (value.length === 0 || value.length > MAX_REF_LENGTH) {
-    fail("INVALID_REF", `${name} must be 1..${MAX_REF_LENGTH} characters`);
-  }
-}
-
-function requirePositiveInt(value: number, name: string, code: string): void {
-  if (!Number.isInteger(value) || value < 1 || !Number.isFinite(value)) {
-    fail(code, `${name} must be a positive integer`);
-  }
 }
 
 function currentWindow(
@@ -908,16 +1038,58 @@ function currentWindow(
 
 async function loadAllowance(
   ctx: MutationCtx,
-  scope: string,
-  subjectRef: string,
-  key: string,
-): Promise<Doc<"allowances"> | null> {
+  {
+    key,
+    scope,
+    subjectRef,
+  }: { key: string; scope: string; subjectRef: string },
+): Promise<Document_<"allowances"> | null> {
   return ctx.db
     .query("allowances")
     .withIndex("by_scope_subject_key", (q) =>
       q.eq("scope", scope).eq("subjectRef", subjectRef).eq("key", key),
     )
     .first();
+}
+
+function allowanceWindow(
+  existing: Document_<"allowances"> | null,
+  spec: WindowSpec,
+) {
+  const rollingStart =
+    existing !== null && spec.kind === "rolling"
+      ? existing.windowStartAt
+      : undefined;
+  const window = currentWindow(spec, rollingStart);
+  const policyKey = windowPolicyKey(spec);
+  if (existing !== null && existing.policyKey !== policyKey) {
+    fail("POLICY_MISMATCH", "Use a new key to change window policy");
+  }
+  const used =
+    existing !== null && existing.periodKey === window.periodKey
+      ? existing.used
+      : 0;
+  return { policyKey, used, window };
+}
+
+function consumptionState(window: ResolvedWindow, limit: number, used: number) {
+  return {
+    limit,
+    periodKey: window.periodKey,
+    remaining: Math.max(limit - used, 0),
+    resetsAt: window.endAt,
+    used,
+  };
+}
+
+async function saveAllowance(
+  ctx: MutationCtx,
+  existing: Document_<"allowances"> | null,
+  row: Omit<Document_<"allowances">, "_creationTime" | "_id">,
+) {
+  await (existing === null
+    ? ctx.db.insert("allowances", row)
+    : ctx.db.patch("allowances", existing._id, row));
 }
 
 export const consume = mutation({
@@ -929,66 +1101,38 @@ export const consume = mutation({
     subjectRef: v.string(),
     window: windowSpec,
   },
-  returns: consumeResult,
-  handler: async (ctx, args) => {
-    requireRef(args.subjectRef, "subjectRef");
-    requireRef(args.key, "key");
-    requirePositiveInt(args.limit, "limit", "INVALID_LIMIT");
-    requirePositiveInt(args.amount, "amount", "INVALID_AMOUNT");
+  handler: async (ctx, arguments_) => {
+    requireAllowanceInput(arguments_);
+    requirePositiveInt(arguments_.amount, "amount", "INVALID_AMOUNT");
 
-    const existing = await loadAllowance(
-      ctx,
-      args.scope,
-      args.subjectRef,
-      args.key,
+    const existing = await loadAllowance(ctx, arguments_);
+    const { policyKey, used, window } = allowanceWindow(
+      existing,
+      arguments_.window,
     );
-    const rollingStart =
-      existing !== null && args.window.kind === "rolling"
-        ? existing.windowStartAt
-        : undefined;
-    const window = currentWindow(args.window, rollingStart);
-    const now = Date.now();
-    const used =
-      existing !== null && existing.periodKey === window.periodKey
-        ? existing.used
-        : 0;
-    const nextUsed = used + args.amount;
-    if (nextUsed > args.limit) {
-      return {
-        allowed: false as const,
-        limit: args.limit,
-        periodKey: window.periodKey,
-        remaining: Math.max(args.limit - used, 0),
-        resetsAt: window.endAt,
-        used,
-      };
-    }
-
-    const row = {
-      key: args.key,
-      limit: args.limit,
+    // Compare before addition: even safe operands can have an unsafe sum.
+    const allowed = arguments_.amount <= arguments_.limit - used;
+    const nextUsed = allowed ? used + arguments_.amount : used;
+    const result = {
+      allowed,
+      ...consumptionState(window, arguments_.limit, nextUsed),
+    };
+    if (!allowed) return result;
+    await saveAllowance(ctx, existing, {
+      key: arguments_.key,
+      limit: arguments_.limit,
       periodKey: window.periodKey,
-      scope: args.scope,
-      subjectRef: args.subjectRef,
-      updatedAt: now,
+      policyKey,
+      scope: arguments_.scope,
+      subjectRef: arguments_.subjectRef,
+      updatedAt: Date.now(),
       used: nextUsed,
       windowEndAt: window.endAt,
       windowStartAt: window.startAt,
-    };
-    if (existing === null) {
-      await ctx.db.insert("allowances", row);
-    } else {
-      await ctx.db.patch("allowances", existing._id, row);
-    }
-    return {
-      allowed: true as const,
-      limit: args.limit,
-      periodKey: window.periodKey,
-      remaining: Math.max(args.limit - nextUsed, 0),
-      resetsAt: window.endAt,
-      used: nextUsed,
-    };
+    });
+    return result;
   },
+  returns: consumeResult,
 });
 
 export const refund = mutation({
@@ -999,23 +1143,18 @@ export const refund = mutation({
     scope: v.string(),
     subjectRef: v.string(),
   },
-  returns: v.object({
-    refunded: v.boolean(),
-    remaining: v.number(),
-    used: v.number(),
-  }),
-  handler: async (ctx, args) => {
-    requireRef(args.subjectRef, "subjectRef");
-    requireRef(args.key, "key");
-    requirePositiveInt(args.amount, "amount", "INVALID_AMOUNT");
+  handler: async (ctx, arguments_) => {
+    requireRef(arguments_.subjectRef, "subjectRef");
+    requireRef(arguments_.key, "key");
+    requireRef(arguments_.scope, "scope");
+    requireRef(arguments_.periodKey, "periodKey");
+    requirePositiveInt(arguments_.amount, "amount", "INVALID_AMOUNT");
 
-    const existing = await loadAllowance(
-      ctx,
-      args.scope,
-      args.subjectRef,
-      args.key,
-    );
-    if (existing === null || existing.periodKey !== args.periodKey) {
+    const existing = await loadAllowance(ctx, arguments_);
+    if (
+      existing?.periodKey !== arguments_.periodKey ||
+      Date.now() >= existing.windowEndAt
+    ) {
       return {
         refunded: false,
         remaining:
@@ -1024,7 +1163,7 @@ export const refund = mutation({
       };
     }
 
-    const used = Math.max(existing.used - args.amount, 0);
+    const used = Math.max(existing.used - arguments_.amount, 0);
     await ctx.db.patch("allowances", existing._id, {
       updatedAt: Date.now(),
       used,
@@ -1035,6 +1174,11 @@ export const refund = mutation({
       used,
     };
   },
+  returns: v.object({
+    refunded: v.boolean(),
+    remaining: v.number(),
+    used: v.number(),
+  }),
 });
 
 export const eraseSubject = mutation({
@@ -1043,10 +1187,10 @@ export const eraseSubject = mutation({
     scope: v.string(),
     subjectRef: v.string(),
   },
-  returns: v.number(),
-  handler: async (ctx, args) => {
-    requireRef(args.subjectRef, "subjectRef");
-    const raw = args.batch ?? DEFAULT_ERASE_BATCH;
+  handler: async (ctx, arguments_) => {
+    requireRef(arguments_.subjectRef, "subjectRef");
+    requireRef(arguments_.scope, "scope");
+    const raw = arguments_.batch ?? DEFAULT_ERASE_BATCH;
     if (!Number.isInteger(raw)) {
       fail("INVALID_BATCH", "batch must be a positive integer");
     }
@@ -1057,19 +1201,20 @@ export const eraseSubject = mutation({
     const rows = await ctx.db
       .query("allowances")
       .withIndex("by_scope_subject_key", (q) =>
-        q.eq("scope", args.scope).eq("subjectRef", args.subjectRef),
+        q.eq("scope", arguments_.scope).eq("subjectRef", arguments_.subjectRef),
       )
       .take(batch);
     await Promise.all(rows.map((row) => ctx.db.delete("allowances", row._id)));
     if (rows.length === batch) {
       await ctx.scheduler.runAfter(0, api.mutations.eraseSubject, {
         batch,
-        scope: args.scope,
-        subjectRef: args.subjectRef,
+        scope: arguments_.scope,
+        subjectRef: arguments_.subjectRef,
       });
     }
     return rows.length;
   },
+  returns: v.number(),
 });
 
 ```
@@ -1080,14 +1225,21 @@ export const eraseSubject = mutation({
 
 ```ts
 import { ConvexError, v } from "convex/values";
-import { query } from "./_generated/server";
+
 import {
   interpretWindowError,
-  resolveWindow,
   type ResolvedWindow,
+  resolveWindow,
+  windowPolicyKey,
   type WindowSpec,
 } from "../shared";
-import { remainingState, windowSpec } from "./validators";
+
+import { query } from "./_generated/server";
+import {
+  remainingState,
+  requireAllowanceInput,
+  windowSpec,
+} from "./validators";
 
 function fail(code: string, message: string): never {
   throw new ConvexError({ code, message });
@@ -1113,32 +1265,36 @@ export const remaining = query({
     subjectRef: v.string(),
     window: windowSpec,
   },
-  returns: remainingState,
-  handler: async (ctx, args) => {
+  handler: async (ctx, arguments_) => {
+    requireAllowanceInput(arguments_);
     const row = await ctx.db
       .query("allowances")
       .withIndex("by_scope_subject_key", (q) =>
         q
-          .eq("scope", args.scope)
-          .eq("subjectRef", args.subjectRef)
-          .eq("key", args.key),
+          .eq("scope", arguments_.scope)
+          .eq("subjectRef", arguments_.subjectRef)
+          .eq("key", arguments_.key),
       )
       .first();
     const rollingStart =
-      row !== null && args.window.kind === "rolling"
+      row !== null && arguments_.window.kind === "rolling"
         ? row.windowStartAt
         : undefined;
-    const window = currentWindow(args.window, rollingStart);
+    const window = currentWindow(arguments_.window, rollingStart);
+    if (row !== null && row.policyKey !== windowPolicyKey(arguments_.window)) {
+      fail("POLICY_MISMATCH", "Use a new key to change window policy");
+    }
     const used =
       row !== null && row.periodKey === window.periodKey ? row.used : 0;
     return {
-      limit: args.limit,
+      limit: arguments_.limit,
       periodKey: window.periodKey,
-      remaining: Math.max(args.limit - used, 0),
+      remaining: Math.max(arguments_.limit - used, 0),
       resetsAt: window.endAt,
       used,
     };
   },
+  returns: remainingState,
 });
 
 ```
@@ -1149,6 +1305,7 @@ export const remaining = query({
 
 ```ts
 import type { TestConvex } from "convex-test";
+
 import schema from "./component/schema";
 
 const modules = import.meta.glob("./component/**/*.ts");
@@ -1157,7 +1314,10 @@ const modules = import.meta.glob("./component/**/*.ts");
  * Register this component with a `convex-test` instance so consuming apps can
  * test integration: `import { register } from "@vllnt/convex-quota/test"`.
  */
-export function register(t: TestConvex<typeof schema>, name = "quota"): void {
+export function register(
+  t: Pick<TestConvex<typeof schema>, "registerComponent">,
+  name = "quota",
+): void {
   t.registerComponent(name, schema, modules);
 }
 

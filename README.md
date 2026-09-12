@@ -11,8 +11,12 @@ Scheduled-reset per-subject allowances as a Convex component.
 Readable remaining in a window — calendar day/week/month, rolling, or epoch.
 Daily/weekly play caps, free-tier slots, Codex-style limits.
 
-Not a silent 429 (`@convex-dev/rate-limiter`), not billable usage
-(`@vllnt/convex-metering`), not a persistent balance (`@vllnt/convex-wallet`).
+The official `@convex-dev/rate-limiter` already supports fixed windows, token
+buckets, readable status and React hooks. Prefer it for general throttling.
+This experimental component explores the narrower calendar/timezone reset and
+privileged allowance-refund surface. It is not billable metering or a persistent
+balance. Publication remains blocked on demonstrated independent consumers and
+justification of this boundary; readable remaining alone is not a distinction.
 
 ```ts
 const quota = new Quota(components.quota);
@@ -26,10 +30,10 @@ if (!r.allowed) throw new Error(`try again at ${r.resetsAt}`);
 
 ## Features
 
-- **Readable remaining** — `consume` / `remaining` return `{ allowed, used, remaining, limit, periodKey, resetsAt }`.
+- **Readable remaining** — both return `{ used, remaining, limit, periodKey, resetsAt }`; only `consume` includes `allowed`.
 - **Window kinds** — calendar (`day` / `week` / `month` + IANA timezone), rolling (from first consume), epoch (`floor(now / durationMs)`).
 - **Server-sourced time** — window math uses `Date.now()` inside the component.
-- **Opaque refs** — `subjectRef` and `key` are host strings (max 256 chars).
+- **Opaque refs** — `subjectRef`, `key`, and `scope` are host strings (1..256 UTF-16 code units).
 - **Bounded erase** — `eraseSubject` deletes in batches and reschedules until clean.
 - **Scopes** — default `"global"`, or namespace per tenant / product.
 
@@ -39,7 +43,7 @@ if (!r.allowed) throw new Error(`try again at ${r.resetsAt}`);
 pnpm add @vllnt/convex-quota
 ```
 
-Peer dependency: `convex@^1.45.0`.
+Node.js >=22.12.0; peer dependency: `convex@^1.45.0`.
 
 ## Usage
 
@@ -78,7 +82,10 @@ export const play = mutation({
 
 - Never take `limit` or `amount` from the end-user. The host supplies them.
 - `consume` is not idempotent. Wrap retries with `@vllnt/convex-idempotency`.
-- `refund` is a privileged host operation, not a client-facing undo.
+- `refund` is privileged and **not idempotent**. Deduplicate refund events in the host transaction; `periodKey` is a window label, not a receipt or replay token.
+- Keep window policy fixed for each `(scope, subjectRef, key)`; changes throw `POLICY_MISMATCH`. Use a new key for a new policy. Limits may change without resetting usage.
+- Stop new consumes before erasing a subject and keep them stopped until scheduled passes drain. Erasure is not a tombstone; concurrent writes can survive or be swept.
+- The example wrappers are unauthenticated test fixtures, not production endpoints.
 
 ## API Reference
 
@@ -90,6 +97,27 @@ export const play = mutation({
 | `eraseSubject(ctx, subjectRef, scope?, batch?)` | mutation | `number` deleted this pass |
 
 Full reference: [docs/API.md](docs/API.md).
+
+## Multiple mounts
+
+```ts
+app.use(quota, { name: "webQuota" });
+app.use(quota, { name: "mobileQuota" });
+// new Quota(components.webQuota), new Quota(components.mobileQuota)
+```
+
+Each mount has independent sandboxed tables. Use `scope` for runtime namespaces.
+
+## Operational behavior
+
+`remaining` is a snapshot when its query executes: **time passing alone does not
+invalidate a Convex subscription**. Treat `resetsAt` as an expiry hint, not a
+scheduled notification; `consume` always rechecks server time. Rolling windows
+start on the first **allowed** consume. No history or audit events are retained.
+Hosts should record denied decisions and privileged refunds in their own audit
+system without logging sensitive refs. A hot allowance is one contended row;
+different indexed keys remain independent. Monitor Convex OCC retries and
+scheduled-function failures. Erasure returns only its first pass count.
 
 ## React
 
@@ -110,7 +138,8 @@ pnpm test
 pnpm test:coverage
 ```
 
-Tests run against the real component runtime via `convex-test` (`@edge-runtime/vm`).
+Unit/integration tests use the **mock backend** `convex-test` (`@edge-runtime/vm`).
+They do not establish real-backend OCC or scheduler guarantees.
 
 ## Contributing
 

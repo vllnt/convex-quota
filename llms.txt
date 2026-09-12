@@ -1,34 +1,43 @@
 # @vllnt/convex-quota
 
-> Scheduled-reset per-subject allowances as a Convex component
+> Experimental scheduled-reset per-subject allowances; not yet released.
 
-`@vllnt/convex-quota` is a publishable Convex component. It targets `convex@^1.45.0`.
-It stores one sandboxed table — `allowances` (one row per `(scope, subjectRef, key)` for the
-current window: `used`, `limit`, `periodKey`, `windowStartAt`, `windowEndAt`). `consume` adds
-`amount` (default 1) if it would not exceed `limit`; `remaining` recomputes the current window
-without a write; `refund` subtracts within the same `periodKey`; `eraseSubject` deletes in
-bounded batches and reschedules. Windows: calendar (`day` / `week` / `month` + IANA timezone),
-rolling (from first consume), epoch (`floor(now / durationMs)`). Time is server-sourced. The host
-owns auth, `subjectRef`, `key`, and `limit` (never take limit from the end-user). Distinct from
-`@convex-dev/rate-limiter` (silent gate), `@vllnt/convex-metering` (billable usage), and
-`@vllnt/convex-wallet` (persistent balance).
+Targets Node >=22.12.0 and convex@^1.45.0. One sandboxed allowance row per
+(scope, subjectRef, key) stores used, limit, periodKey, policyKey and window times.
+Calendar windows support IANA timezones and day/week/month resets; rolling windows
+start on first allowed consume; epoch windows align to Unix epoch. A key's window
+policy cannot change (POLICY_MISMATCH); limits may change without resetting usage.
+Refs/scopes are 1..256 UTF-16 code units. Amounts/limits are positive safe integers.
+Durations are positive safe integer milliseconds with safe end timestamps.
+
+consume(ctx, subjectRef, key, limit, window, opts?) returns allowed, used,
+remaining, limit, periodKey, resetsAt; opts is {amount?, scope?}.
+remaining(ctx, subjectRef, key, limit, window, scope?) returns the same without
+allowed. It is a query-execution snapshot: subscriptions do not refresh just
+because time passes. consume always rechecks server time.
+refund(ctx, subjectRef, key, amount, periodKey, scope?) returns refunded, used,
+remaining. Requires matching unexpired stored period; clamps usage at zero.
+Consume and refund are NOT idempotent; hosts must deduplicate events. A period
+label is not a receipt and can be reused after erasure.
+eraseSubject(ctx, subjectRef, scope?, batch?) returns this pass's deletion count;
+batches default to 200 and cap at 500, scheduling continuation when full. Hosts
+must stop concurrent writes while cleanup drains. No tombstones or audit history.
+
+Host owns auth, authorization and all policy. Multiple named mounts isolate data;
+runtime scopes isolate indexed reads/erasure within a mount. Official
+@convex-dev/rate-limiter already has fixed windows, token buckets, readable checks
+and React hooks; prefer it for general throttling. This experiment's narrower
+calendar/timezone/refund boundary still needs independent consumer justification.
+Publication is blocked; passing tests alone does not establish adoption or readiness.
 
 ## Docs
 
-- [README](README.md): Project overview, installation, usage examples, architecture
-- [API Reference](docs/API.md): Public class methods, return shapes, input validation
-- [Changelog](CHANGELOG.md): Version history and release notes
-- [Contributing](CONTRIBUTING.md): Development setup, validation commands, release workflow
-
-## Examples
-
-- [Example component wrapper](example/convex/example.ts): Host-app wrapper functions
-- [Example tests](example/convex/example.test.ts): End-to-end usage coverage with `convex-test`
-
-## Optional
-
-- [AGENTS](AGENTS.md): Canonical agent instructions for this repository
-- [Security Policy](SECURITY.md): Vulnerability reporting policy
-- [Code of Conduct](CODE_OF_CONDUCT.md): Community participation guidelines
-- [License](LICENSE): MIT license
-- [Full source bundle](llms-full.txt): Aggregated README, changelog, API docs, and key source files
+- [README](README.md): Setup, behavior, security, multi-mount and limitations
+- [API Reference](docs/API.md): Exact signatures, results and error semantics
+- [Changelog](CHANGELOG.md): Unreleased changes and development schema migration
+- [Contributing](CONTRIBUTING.md): Development workflow
+- [Example wrapper](example/convex/example.ts): Unauthenticated test fixtures, not production endpoints
+- [Tests](example/convex/example.test.ts): convex-test mock integration tests, not real OCC proof
+- [Security Policy](SECURITY.md): Reporting
+- [License](LICENSE): MIT
+- [Full source bundle](llms-full.txt): Generated docs and source

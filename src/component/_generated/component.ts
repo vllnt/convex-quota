@@ -10,25 +10,17 @@
 
 import type { FunctionReference } from "convex/server";
 
-type WindowSpec =
-  | {
-      kind: "calendar";
-      period: "day" | "week" | "month";
-      timeZone: string;
-      weekStartsOn?: "monday" | "sunday";
-    }
-  | { kind: "rolling"; durationMs: number }
-  | { kind: "epoch"; durationMs: number };
-
-type ConsumeResult = {
-  allowed: boolean;
-  remaining: number;
-  used: number;
-  limit: number;
-  periodKey: string;
-  resetsAt: number;
-};
-
+/**
+ * A utility for referencing a Convex component's exposed API.
+ *
+ * Useful when expecting a parameter like `components.myComponent`.
+ * Usage:
+ * ```ts
+ * async function myFunction(ctx: QueryCtx, component: ComponentApi) {
+ *   return ctx.runQuery(component.someFile.someQuery, { ...args });
+ * }
+ * ```
+ */
 export type ComponentApi<Name extends string | undefined = string | undefined> =
   {
     mutations: {
@@ -41,9 +33,32 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           limit: number;
           scope: string;
           subjectRef: string;
-          window: WindowSpec;
+          window:
+            | {
+                kind: "calendar";
+                period: "day" | "week" | "month";
+                timeZone: string;
+                weekStartsOn?: "monday" | "sunday";
+              }
+            | { durationMs: number; kind: "rolling" }
+            | { durationMs: number; kind: "epoch" };
         },
-        ConsumeResult,
+        | {
+            allowed: true;
+            limit: number;
+            periodKey: string;
+            remaining: number;
+            resetsAt: number;
+            used: number;
+          }
+        | {
+            allowed: false;
+            limit: number;
+            periodKey: string;
+            remaining: number;
+            resetsAt: number;
+            used: number;
+          },
         Name
       >;
       eraseSubject: FunctionReference<
@@ -76,7 +91,15 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           limit: number;
           scope: string;
           subjectRef: string;
-          window: WindowSpec;
+          window:
+            | {
+                kind: "calendar";
+                period: "day" | "week" | "month";
+                timeZone: string;
+                weekStartsOn?: "monday" | "sunday";
+              }
+            | { durationMs: number; kind: "rolling" }
+            | { durationMs: number; kind: "epoch" };
         },
         {
           limit: number;

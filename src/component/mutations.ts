@@ -1,32 +1,28 @@
 import { ConvexError, v } from "convex/values";
-import { api } from "./_generated/api";
-import type { Doc } from "./_generated/dataModel";
-import { mutation, type MutationCtx } from "./_generated/server";
+
 import {
   DEFAULT_ERASE_BATCH,
-  MAX_ERASE_BATCH,
   interpretWindowError,
-  MAX_REF_LENGTH,
-  resolveWindow,
+  MAX_ERASE_BATCH,
   type ResolvedWindow,
+  resolveWindow,
+  windowPolicyKey,
   type WindowSpec,
 } from "../shared";
-import { consumeResult, windowSpec } from "./validators";
+
+import { api } from "./_generated/api";
+import type { Doc as Document_ } from "./_generated/dataModel";
+import { mutation, type MutationCtx } from "./_generated/server";
+import {
+  consumeResult,
+  requireAllowanceInput,
+  requirePositiveInt,
+  requireRef,
+  windowSpec,
+} from "./validators";
 
 function fail(code: string, message: string): never {
   throw new ConvexError({ code, message });
-}
-
-function requireRef(value: string, name: string): void {
-  if (value.length === 0 || value.length > MAX_REF_LENGTH) {
-    fail("INVALID_REF", `${name} must be 1..${MAX_REF_LENGTH} characters`);
-  }
-}
-
-function requirePositiveInt(value: number, name: string, code: string): void {
-  if (!Number.isInteger(value) || value < 1 || !Number.isFinite(value)) {
-    fail(code, `${name} must be a positive integer`);
-  }
 }
 
 function currentWindow(
@@ -43,16 +39,58 @@ function currentWindow(
 
 async function loadAllowance(
   ctx: MutationCtx,
-  scope: string,
-  subjectRef: string,
-  key: string,
-): Promise<Doc<"allowances"> | null> {
+  {
+    key,
+    scope,
+    subjectRef,
+  }: { key: string; scope: string; subjectRef: string },
+): Promise<Document_<"allowances"> | null> {
   return ctx.db
     .query("allowances")
     .withIndex("by_scope_subject_key", (q) =>
       q.eq("scope", scope).eq("subjectRef", subjectRef).eq("key", key),
     )
     .first();
+}
+
+function allowanceWindow(
+  existing: Document_<"allowances"> | null,
+  spec: WindowSpec,
+) {
+  const rollingStart =
+    existing !== null && spec.kind === "rolling"
+      ? existing.windowStartAt
+      : undefined;
+  const window = currentWindow(spec, rollingStart);
+  const policyKey = windowPolicyKey(spec);
+  if (existing !== null && existing.policyKey !== policyKey) {
+    fail("POLICY_MISMATCH", "Use a new key to change window policy");
+  }
+  const used =
+    existing !== null && existing.periodKey === window.periodKey
+      ? existing.used
+      : 0;
+  return { policyKey, used, window };
+}
+
+function consumptionState(window: ResolvedWindow, limit: number, used: number) {
+  return {
+    limit,
+    periodKey: window.periodKey,
+    remaining: Math.max(limit - used, 0),
+    resetsAt: window.endAt,
+    used,
+  };
+}
+
+async function saveAllowance(
+  ctx: MutationCtx,
+  existing: Document_<"allowances"> | null,
+  row: Omit<Document_<"allowances">, "_creationTime" | "_id">,
+) {
+  await (existing === null
+    ? ctx.db.insert("allowances", row)
+    : ctx.db.patch("allowances", existing._id, row));
 }
 
 export const consume = mutation({
@@ -64,66 +102,38 @@ export const consume = mutation({
     subjectRef: v.string(),
     window: windowSpec,
   },
-  returns: consumeResult,
-  handler: async (ctx, args) => {
-    requireRef(args.subjectRef, "subjectRef");
-    requireRef(args.key, "key");
-    requirePositiveInt(args.limit, "limit", "INVALID_LIMIT");
-    requirePositiveInt(args.amount, "amount", "INVALID_AMOUNT");
+  handler: async (ctx, arguments_) => {
+    requireAllowanceInput(arguments_);
+    requirePositiveInt(arguments_.amount, "amount", "INVALID_AMOUNT");
 
-    const existing = await loadAllowance(
-      ctx,
-      args.scope,
-      args.subjectRef,
-      args.key,
+    const existing = await loadAllowance(ctx, arguments_);
+    const { policyKey, used, window } = allowanceWindow(
+      existing,
+      arguments_.window,
     );
-    const rollingStart =
-      existing !== null && args.window.kind === "rolling"
-        ? existing.windowStartAt
-        : undefined;
-    const window = currentWindow(args.window, rollingStart);
-    const now = Date.now();
-    const used =
-      existing !== null && existing.periodKey === window.periodKey
-        ? existing.used
-        : 0;
-    const nextUsed = used + args.amount;
-    if (nextUsed > args.limit) {
-      return {
-        allowed: false as const,
-        limit: args.limit,
-        periodKey: window.periodKey,
-        remaining: Math.max(args.limit - used, 0),
-        resetsAt: window.endAt,
-        used,
-      };
-    }
-
-    const row = {
-      key: args.key,
-      limit: args.limit,
+    // Compare before addition: even safe operands can have an unsafe sum.
+    const allowed = arguments_.amount <= arguments_.limit - used;
+    const nextUsed = allowed ? used + arguments_.amount : used;
+    const result = {
+      allowed,
+      ...consumptionState(window, arguments_.limit, nextUsed),
+    };
+    if (!allowed) return result;
+    await saveAllowance(ctx, existing, {
+      key: arguments_.key,
+      limit: arguments_.limit,
       periodKey: window.periodKey,
-      scope: args.scope,
-      subjectRef: args.subjectRef,
-      updatedAt: now,
+      policyKey,
+      scope: arguments_.scope,
+      subjectRef: arguments_.subjectRef,
+      updatedAt: Date.now(),
       used: nextUsed,
       windowEndAt: window.endAt,
       windowStartAt: window.startAt,
-    };
-    if (existing === null) {
-      await ctx.db.insert("allowances", row);
-    } else {
-      await ctx.db.patch("allowances", existing._id, row);
-    }
-    return {
-      allowed: true as const,
-      limit: args.limit,
-      periodKey: window.periodKey,
-      remaining: Math.max(args.limit - nextUsed, 0),
-      resetsAt: window.endAt,
-      used: nextUsed,
-    };
+    });
+    return result;
   },
+  returns: consumeResult,
 });
 
 export const refund = mutation({
@@ -134,23 +144,18 @@ export const refund = mutation({
     scope: v.string(),
     subjectRef: v.string(),
   },
-  returns: v.object({
-    refunded: v.boolean(),
-    remaining: v.number(),
-    used: v.number(),
-  }),
-  handler: async (ctx, args) => {
-    requireRef(args.subjectRef, "subjectRef");
-    requireRef(args.key, "key");
-    requirePositiveInt(args.amount, "amount", "INVALID_AMOUNT");
+  handler: async (ctx, arguments_) => {
+    requireRef(arguments_.subjectRef, "subjectRef");
+    requireRef(arguments_.key, "key");
+    requireRef(arguments_.scope, "scope");
+    requireRef(arguments_.periodKey, "periodKey");
+    requirePositiveInt(arguments_.amount, "amount", "INVALID_AMOUNT");
 
-    const existing = await loadAllowance(
-      ctx,
-      args.scope,
-      args.subjectRef,
-      args.key,
-    );
-    if (existing === null || existing.periodKey !== args.periodKey) {
+    const existing = await loadAllowance(ctx, arguments_);
+    if (
+      existing?.periodKey !== arguments_.periodKey ||
+      Date.now() >= existing.windowEndAt
+    ) {
       return {
         refunded: false,
         remaining:
@@ -159,7 +164,7 @@ export const refund = mutation({
       };
     }
 
-    const used = Math.max(existing.used - args.amount, 0);
+    const used = Math.max(existing.used - arguments_.amount, 0);
     await ctx.db.patch("allowances", existing._id, {
       updatedAt: Date.now(),
       used,
@@ -170,6 +175,11 @@ export const refund = mutation({
       used,
     };
   },
+  returns: v.object({
+    refunded: v.boolean(),
+    remaining: v.number(),
+    used: v.number(),
+  }),
 });
 
 export const eraseSubject = mutation({
@@ -178,10 +188,10 @@ export const eraseSubject = mutation({
     scope: v.string(),
     subjectRef: v.string(),
   },
-  returns: v.number(),
-  handler: async (ctx, args) => {
-    requireRef(args.subjectRef, "subjectRef");
-    const raw = args.batch ?? DEFAULT_ERASE_BATCH;
+  handler: async (ctx, arguments_) => {
+    requireRef(arguments_.subjectRef, "subjectRef");
+    requireRef(arguments_.scope, "scope");
+    const raw = arguments_.batch ?? DEFAULT_ERASE_BATCH;
     if (!Number.isInteger(raw)) {
       fail("INVALID_BATCH", "batch must be a positive integer");
     }
@@ -192,17 +202,18 @@ export const eraseSubject = mutation({
     const rows = await ctx.db
       .query("allowances")
       .withIndex("by_scope_subject_key", (q) =>
-        q.eq("scope", args.scope).eq("subjectRef", args.subjectRef),
+        q.eq("scope", arguments_.scope).eq("subjectRef", arguments_.subjectRef),
       )
       .take(batch);
     await Promise.all(rows.map((row) => ctx.db.delete("allowances", row._id)));
     if (rows.length === batch) {
       await ctx.scheduler.runAfter(0, api.mutations.eraseSubject, {
         batch,
-        scope: args.scope,
-        subjectRef: args.subjectRef,
+        scope: arguments_.scope,
+        subjectRef: arguments_.subjectRef,
       });
     }
     return rows.length;
   },
+  returns: v.number(),
 });

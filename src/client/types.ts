@@ -1,39 +1,37 @@
 /** Public TypeScript surface for the quota client. */
 
-import type { WindowSpec } from "../shared.js";
-
-export type { WindowSpec };
-
-export interface ConsumeResult {
+export type ConsumeResult = {
   allowed: boolean;
-  remaining: number;
-  used: number;
   limit: number;
   periodKey: string;
-  resetsAt: number;
-}
-
-export interface RemainingState {
   remaining: number;
+  resetsAt: number;
   used: number;
+};
+
+export type RemainingState = {
   limit: number;
   periodKey: string;
+  remaining: number;
   resetsAt: number;
-}
+  used: number;
+};
 
-export interface RefundResult {
+export type RefundResult = {
   refunded: boolean;
-  used: number;
   remaining: number;
-}
+  used: number;
+};
 
-export interface QuotaOptions {
+export type QuotaOptions = {
   /** Namespace applied when a call omits `scope`. Default `"global"`. */
   defaultScope?: string;
-}
+};
 
-export interface ConsumeOptions {
-  scope?: string;
+export type ConsumeOptions = {
   /** Units to consume. Default `1`. */
   amount?: number;
-}
+  scope?: string;
+};
+
+export { type WindowSpec } from "../shared.js";

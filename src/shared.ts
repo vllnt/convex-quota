@@ -5,37 +5,49 @@ export const COMPONENT_NAME = "quota";
 /** Default namespace when the host does not scope an allowance. */
 export const DEFAULT_SCOPE = "global";
 
-/** Opaque refs longer than this are rejected. */
+/** Length limit for opaque refs. */
 export const MAX_REF_LENGTH = 256;
 
 /** Default / max rows deleted per erase pass before the sweep reschedules. */
 export const DEFAULT_ERASE_BATCH = 200;
 export const MAX_ERASE_BATCH = 500;
 
-export type CalendarPeriod = "day" | "week" | "month";
+export type CalendarPeriod = "day" | "month" | "week";
 export type WeekStartsOn = "monday" | "sunday";
 
 export type WindowSpec =
+  | {
+      durationMs: number;
+      kind: "epoch";
+    }
+  | {
+      durationMs: number;
+      kind: "rolling";
+    }
   | {
       kind: "calendar";
       period: CalendarPeriod;
       timeZone: string;
       weekStartsOn?: WeekStartsOn;
-    }
-  | {
-      kind: "rolling";
-      durationMs: number;
-    }
-  | {
-      kind: "epoch";
-      durationMs: number;
     };
 
 export type ResolvedWindow = {
+  endAt: number;
   periodKey: string;
   startAt: number;
-  endAt: number;
 };
+
+/** Stable policy identity; hosts must use a new key to change window policy. */
+export function windowPolicyKey(spec: WindowSpec): string {
+  return spec.kind === "calendar"
+    ? JSON.stringify([
+        spec.kind,
+        spec.period,
+        spec.timeZone,
+        spec.period === "week" ? (spec.weekStartsOn ?? "monday") : undefined,
+      ])
+    : JSON.stringify([spec.kind, spec.durationMs]);
+}
 
 const formatterCache = new Map<string, Intl.DateTimeFormat>();
 
@@ -43,8 +55,12 @@ function pad2(value: number): string {
   return value.toString().padStart(2, "0");
 }
 
-function assertFinitePositive(value: number, code: string, message: string): void {
-  if (!(value > 0 && Number.isFinite(value))) {
+function assertFinitePositive(
+  value: number,
+  code: string,
+  message: string,
+): void {
+  if (!(value > 0 && Number.isSafeInteger(value))) {
     throw new Error(`${code}:${message}`);
   }
 }
@@ -73,10 +89,12 @@ function formatterFor(timeZone: string): Intl.DateTimeFormat {
   }
 }
 
-function partMap(parts: readonly Intl.DateTimeFormatPart[]): Record<string, string> {
-  return parts.reduce<Record<string, string>>((acc, part) => {
-    acc[part.type] = part.value;
-    return acc;
+function partMap(
+  parts: readonly Intl.DateTimeFormatPart[],
+): Record<string, string> {
+  return parts.reduce<Record<string, string>>((accumulator, part) => {
+    accumulator[part.type] = part.value;
+    return accumulator;
   }, {});
 }
 
@@ -111,11 +129,11 @@ export function zonedParts(
   };
 }
 
+type CivilDate = { day: number; month: number; year: number };
+
 function stepMidnight(
   guess: number,
-  year: number,
-  month: number,
-  day: number,
+  { day, month, year }: CivilDate,
   timeZone: string,
 ): number {
   const parts = zonedParts(guess, timeZone);
@@ -136,29 +154,36 @@ function stepMidnight(
 }
 
 /**
- * UTC ms for local midnight of `year-month-day` in `timeZone`.
- * Two offset corrections so DST does not leave the result on the wrong day.
+ * UTC ms for the start of a civil date. Repeated midnight chooses the earlier
+ * occurrence; a skipped midnight/date advances through the timezone gap.
  */
 export function utcMsForLocalMidnight(
-  year: number,
-  month: number,
-  day: number,
+  { day, month, year }: CivilDate,
   timeZone: string,
 ): number {
   const first = Date.UTC(year, month - 1, day);
-  return stepMidnight(
-    stepMidnight(first, year, month, day, timeZone),
-    year,
-    month,
-    day,
-    timeZone,
+  const corrected = stepMidnight(first, { day, month, year }, timeZone);
+  const candidates = [-86_400_000, 0, 86_400_000].map((delta) =>
+    stepMidnight(corrected + delta, { day, month, year }, timeZone),
   );
+  const exact = candidates.filter((candidate) => {
+    const parts = zonedParts(candidate, timeZone);
+    return (
+      parts.year === year &&
+      parts.month === month &&
+      parts.day === day &&
+      parts.hour === 0 &&
+      parts.minute === 0 &&
+      parts.second === 0
+    );
+  });
+  return exact.length > 0
+    ? Math.min(...exact)
+    : Math.max(corrected, ...candidates);
 }
 
 function addDays(
-  year: number,
-  month: number,
-  day: number,
+  { day, month, year }: CivilDate,
   delta: number,
 ): { day: number; month: number; year: number } {
   const date = new Date(Date.UTC(year, month - 1, day + delta));
@@ -185,95 +210,75 @@ export function isoWeek(
   return { week, year: thursday.getUTCFullYear() };
 }
 
-function sundayWeek(
-  year: number,
-  month: number,
-  day: number,
-  weekday: number,
-): { week: number; year: number } {
-  const start = addDays(year, month, day, -weekday);
-  return isoWeek(start.year, start.month, start.day);
+function resolveWeek(
+  parts: ReturnType<typeof zonedParts>,
+  timeZone: string,
+  weekStartsOn: WeekStartsOn,
+): ResolvedWindow {
+  const sunday = weekStartsOn === "sunday";
+  const mondayDelta = parts.weekday === 0 ? -6 : 1 - parts.weekday;
+  const delta = sunday ? -parts.weekday : mondayDelta;
+  const start = addDays(parts, delta);
+  const end = addDays(start, 7);
+  const labelDate = sunday ? start : parts;
+  const label = isoWeek(labelDate.year, labelDate.month, labelDate.day);
+  return {
+    endAt: utcMsForLocalMidnight(end, timeZone),
+    periodKey: `${label.year.toString()}-W${pad2(label.week)}${sunday ? "-sun" : ""}`,
+    startAt: utcMsForLocalMidnight(start, timeZone),
+  };
 }
 
 function resolveCalendar(
   now: number,
-  period: CalendarPeriod,
-  timeZone: string,
-  weekStartsOn: WeekStartsOn,
+  spec: Extract<WindowSpec, { kind: "calendar" }>,
 ): ResolvedWindow {
+  const { period, timeZone, weekStartsOn } = spec;
   const parts = zonedParts(now, timeZone);
-  if (period === "day") {
-    const startAt = utcMsForLocalMidnight(
-      parts.year,
-      parts.month,
-      parts.day,
-      timeZone,
-    );
-    const next = addDays(parts.year, parts.month, parts.day, 1);
-    return {
-      endAt: utcMsForLocalMidnight(next.year, next.month, next.day, timeZone),
-      periodKey: `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`,
-      startAt,
-    };
-  }
-  if (period === "month") {
-    const startAt = utcMsForLocalMidnight(parts.year, parts.month, 1, timeZone);
-    const nextMonth = parts.month === 12 ? 1 : parts.month + 1;
-    const nextYear = parts.month === 12 ? parts.year + 1 : parts.year;
-    return {
-      endAt: utcMsForLocalMidnight(nextYear, nextMonth, 1, timeZone),
-      periodKey: `${parts.year}-${pad2(parts.month)}`,
-      startAt,
-    };
-  }
-  if (weekStartsOn === "sunday") {
-    const start = addDays(parts.year, parts.month, parts.day, -parts.weekday);
-    const end = addDays(start.year, start.month, start.day, 7);
-    const labeled = sundayWeek(
-      parts.year,
-      parts.month,
-      parts.day,
-      parts.weekday,
-    );
-    return {
-      endAt: utcMsForLocalMidnight(end.year, end.month, end.day, timeZone),
-      periodKey: `${labeled.year}-W${pad2(labeled.week)}-sun`,
-      startAt: utcMsForLocalMidnight(start.year, start.month, start.day, timeZone),
-    };
-  }
-  const iso = isoWeek(parts.year, parts.month, parts.day);
-  const mondayDelta = parts.weekday === 0 ? -6 : 1 - parts.weekday;
-  const start = addDays(parts.year, parts.month, parts.day, mondayDelta);
-  const end = addDays(start.year, start.month, start.day, 7);
+  if (period === "week")
+    return resolveWeek(parts, timeZone, weekStartsOn ?? "monday");
+  const start = period === "day" ? parts : { ...parts, day: 1 };
+  const next =
+    period === "day"
+      ? addDays(parts, 1)
+      : {
+          day: 1,
+          month: parts.month === 12 ? 1 : parts.month + 1,
+          year: parts.month === 12 ? parts.year + 1 : parts.year,
+        };
   return {
-    endAt: utcMsForLocalMidnight(end.year, end.month, end.day, timeZone),
-    periodKey: `${iso.year}-W${pad2(iso.week)}`,
-    startAt: utcMsForLocalMidnight(start.year, start.month, start.day, timeZone),
+    endAt: utcMsForLocalMidnight(next, timeZone),
+    periodKey: `${parts.year.toString()}-${pad2(parts.month)}${period === "day" ? `-${pad2(parts.day)}` : ""}`,
+    startAt: utcMsForLocalMidnight(start, timeZone),
   };
 }
 
 /**
  * Resolve the current window for `spec` at `now`. For `rolling`, pass the
- * stored `windowStartAt` so an in-progress window is reused until it elapses.
+ * stored `windowStartAt` to reuse an in-progress window until it elapses.
  */
+function validateDuration(now: number, durationMs: number): void {
+  assertFinitePositive(
+    durationMs,
+    "INVALID_DURATION",
+    "durationMs must be a positive safe integer",
+  );
+  assertFinitePositive(
+    now + durationMs,
+    "INVALID_DURATION",
+    "window end must be a positive safe integer",
+  );
+}
+
 export function resolveWindow(
   now: number,
   spec: WindowSpec,
   rollingStartAt?: number,
 ): ResolvedWindow {
   if (spec.kind === "calendar") {
-    return resolveCalendar(
-      now,
-      spec.period,
-      spec.timeZone,
-      spec.weekStartsOn ?? "monday",
-    );
+    return resolveCalendar(now, spec);
   }
-  assertFinitePositive(
-    spec.durationMs,
-    "INVALID_DURATION",
-    "durationMs must be a positive finite number",
-  );
+  validateDuration(now, spec.durationMs);
   if (spec.kind === "epoch") {
     const index = Math.floor(now / spec.durationMs);
     const startAt = index * spec.durationMs;
@@ -283,17 +288,14 @@ export function resolveWindow(
       startAt,
     };
   }
-  if (rollingStartAt !== undefined && now < rollingStartAt + spec.durationMs) {
-    return {
-      endAt: rollingStartAt + spec.durationMs,
-      periodKey: `r${rollingStartAt.toString()}`,
-      startAt: rollingStartAt,
-    };
-  }
+  const startAt =
+    rollingStartAt !== undefined && now < rollingStartAt + spec.durationMs
+      ? rollingStartAt
+      : now;
   return {
-    endAt: now + spec.durationMs,
-    periodKey: `r${now.toString()}`,
-    startAt: now,
+    endAt: startAt + spec.durationMs,
+    periodKey: `r${startAt.toString()}`,
+    startAt,
   };
 }
 

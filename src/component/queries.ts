@@ -1,12 +1,19 @@
 import { ConvexError, v } from "convex/values";
-import { query } from "./_generated/server";
+
 import {
   interpretWindowError,
-  resolveWindow,
   type ResolvedWindow,
+  resolveWindow,
+  windowPolicyKey,
   type WindowSpec,
 } from "../shared";
-import { remainingState, windowSpec } from "./validators";
+
+import { query } from "./_generated/server";
+import {
+  remainingState,
+  requireAllowanceInput,
+  windowSpec,
+} from "./validators";
 
 function fail(code: string, message: string): never {
   throw new ConvexError({ code, message });
@@ -32,30 +39,34 @@ export const remaining = query({
     subjectRef: v.string(),
     window: windowSpec,
   },
-  returns: remainingState,
-  handler: async (ctx, args) => {
+  handler: async (ctx, arguments_) => {
+    requireAllowanceInput(arguments_);
     const row = await ctx.db
       .query("allowances")
       .withIndex("by_scope_subject_key", (q) =>
         q
-          .eq("scope", args.scope)
-          .eq("subjectRef", args.subjectRef)
-          .eq("key", args.key),
+          .eq("scope", arguments_.scope)
+          .eq("subjectRef", arguments_.subjectRef)
+          .eq("key", arguments_.key),
       )
       .first();
     const rollingStart =
-      row !== null && args.window.kind === "rolling"
+      row !== null && arguments_.window.kind === "rolling"
         ? row.windowStartAt
         : undefined;
-    const window = currentWindow(args.window, rollingStart);
+    const window = currentWindow(arguments_.window, rollingStart);
+    if (row !== null && row.policyKey !== windowPolicyKey(arguments_.window)) {
+      fail("POLICY_MISMATCH", "Use a new key to change window policy");
+    }
     const used =
       row !== null && row.periodKey === window.periodKey ? row.used : 0;
     return {
-      limit: args.limit,
+      limit: arguments_.limit,
       periodKey: window.periodKey,
-      remaining: Math.max(args.limit - used, 0),
+      remaining: Math.max(arguments_.limit - used, 0),
       resetsAt: window.endAt,
       used,
     };
   },
+  returns: remainingState,
 });

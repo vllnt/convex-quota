@@ -443,7 +443,7 @@ describe("window math", () => {
   });
 
   test("utcMsForLocalMidnight is the local start of day", () => {
-    const start = utcMsForLocalMidnight(2026, 6, 15, "Europe/Paris");
+    const start = utcMsForLocalMidnight({year: 2026, month: 6, day: 15}, "Europe/Paris");
     const parts = zonedParts(start, "Europe/Paris");
     expect(parts).toMatchObject({
       day: 15,

@@ -11,6 +11,7 @@ export default defineConfig({
       provider: "v8",
       include: [
         "src/shared.ts",
+        "src/test.ts",
         "src/client/index.ts",
         "src/component/mutations.ts",
         "src/component/queries.ts",

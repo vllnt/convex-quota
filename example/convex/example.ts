@@ -5,6 +5,7 @@ import { Quota } from "../../src/client";
 import { windowSpec } from "../../src/component/validators";
 
 const quota = new Quota(components.quota);
+const secondaryQuota = new Quota(components.secondary);
 const tenantQuota = new Quota(components.quota, { defaultScope: "tenant" });
 
 const consumeResult = v.union(
@@ -89,6 +90,12 @@ export const eraseSubject = mutation({
   },
   returns: v.number(),
   handler: (ctx, a) => quota.eraseSubject(ctx, a.subjectRef, a.scope, a.batch),
+});
+
+export const consumeSecondary = mutation({
+  args: {subjectRef: v.string(), key: v.string(), scope: v.string(), limit: v.number(), window: windowSpec},
+  returns: consumeResult,
+  handler: (ctx, a) => secondaryQuota.consume(ctx, a.subjectRef, a.key, a.limit, a.window, {scope: a.scope}),
 });
 
 export const consumeTenant = mutation({

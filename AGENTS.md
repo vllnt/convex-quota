@@ -1,8 +1,8 @@
 <!-- convex-ai-start -->
 This project uses [Convex](https://convex.dev) as its backend.
 
-When working on Convex code, **always read `example/convex/_generated/ai/guidelines.md` first** for
-important guidelines on how to correctly use Convex APIs and patterns.
+When working on Convex code, read the official [Convex guidelines](https://version.convex.dev/v1/guidelines)
+for API and component patterns. The generated local guidance file is not tracked.
 <!-- convex-ai-end -->
 
 # @vllnt/convex-quota

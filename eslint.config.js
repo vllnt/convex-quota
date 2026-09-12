@@ -1,8 +1,10 @@
+import { base } from "@vllnt/eslint-config";
 import convex from "@vllnt/eslint-config/convex";
 import tseslint from "typescript-eslint";
 
 export default [
-  { ignores: ["example/**", "dist/**", "src/component/_generated/**", "coverage/**"] },
+  { ignores: ["dist/**", "**/_generated/**", "coverage/**"] },
+  ...base.map((config) => ({ ...config, files: ["src/**/*.ts"] })),
   ...convex,
   // Apply convex rules to component source (same structure as a convex/ folder)
   {
@@ -19,6 +21,14 @@ export default [
       "convex-rules/require-returns-validator": "error",
       "convex-rules/no-query-in-loop": "error",
       "convex-rules/no-filter-on-query": "error",
+    },
+  },
+  // The integration fixture deliberately exposes both query and mutation wrappers.
+  {
+    files: ["example/convex/example.ts"],
+    rules: {
+      "convex-rules/standard-filenames": "off",
+      "convex-rules/namespace-separation": "off",
     },
   },
   // Exempt config, validator, and schema files from strict naming rules

@@ -3,6 +3,9 @@ import type {
   FunctionReference,
   FunctionReturnType,
 } from "convex/server";
+
+import { DEFAULT_SCOPE } from "../shared.js";
+
 import type {
   ConsumeOptions,
   ConsumeResult,
@@ -11,9 +14,8 @@ import type {
   RemainingState,
   WindowSpec,
 } from "./types.js";
-import { DEFAULT_ERASE_BATCH, DEFAULT_SCOPE } from "../shared.js";
 
-export interface QuotaComponent {
+export type QuotaComponent = {
   mutations: {
     consume: FunctionReference<
       "mutation",
@@ -61,21 +63,21 @@ export interface QuotaComponent {
       RemainingState
     >;
   };
-}
+};
 
-interface RunQueryCtx {
-  runQuery<Q extends FunctionReference<"query", "internal">>(
-    reference: Q,
-    args: FunctionArgs<Q>,
-  ): Promise<FunctionReturnType<Q>>;
-}
+type RunQueryCtx = {
+  runQuery<TQuery extends FunctionReference<"query", "internal">>(
+    reference: TQuery,
+    arguments_: FunctionArgs<TQuery>,
+  ): Promise<FunctionReturnType<TQuery>>;
+};
 
-interface RunMutationCtx {
-  runMutation<M extends FunctionReference<"mutation", "internal">>(
-    reference: M,
-    args: FunctionArgs<M>,
-  ): Promise<FunctionReturnType<M>>;
-}
+type RunMutationCtx = {
+  runMutation<TMutation extends FunctionReference<"mutation", "internal">>(
+    reference: TMutation,
+    arguments_: FunctionArgs<TMutation>,
+  ): Promise<FunctionReturnType<TMutation>>;
+};
 
 /**
  * Consumer-facing client for the scheduled-reset quota ledger. The host owns
@@ -97,24 +99,26 @@ export class Quota {
     return scope ?? this.defaultScope;
   }
 
+  // eslint-disable-next-line max-params -- Preserve the published positional client contract.
   consume(
     ctx: RunMutationCtx,
     subjectRef: string,
     key: string,
     limit: number,
     window: WindowSpec,
-    opts: ConsumeOptions = {},
+    options: ConsumeOptions = {},
   ): Promise<ConsumeResult> {
     return ctx.runMutation(this.component.mutations.consume, {
-      amount: opts.amount ?? 1,
+      amount: options.amount ?? 1,
       key,
       limit,
-      scope: this.scopeOf(opts.scope),
+      scope: this.scopeOf(options.scope),
       subjectRef,
       window,
     });
   }
 
+  // eslint-disable-next-line max-params -- Preserve the published positional client contract.
   remaining(
     ctx: RunQueryCtx,
     subjectRef: string,
@@ -132,6 +136,7 @@ export class Quota {
     });
   }
 
+  // eslint-disable-next-line max-params -- Preserve the published positional client contract.
   refund(
     ctx: RunMutationCtx,
     subjectRef: string,
@@ -149,6 +154,7 @@ export class Quota {
     });
   }
 
+  // eslint-disable-next-line max-params -- Preserve the published positional client contract.
   eraseSubject(
     ctx: RunMutationCtx,
     subjectRef: string,
@@ -163,11 +169,11 @@ export class Quota {
   }
 }
 
-export type {
-  ConsumeOptions,
-  ConsumeResult,
-  QuotaOptions,
-  RefundResult,
-  RemainingState,
-  WindowSpec,
-};
+export {
+  type ConsumeOptions,
+  type ConsumeResult,
+  type QuotaOptions,
+  type RefundResult,
+  type RemainingState,
+  type WindowSpec,
+} from "./types.js";
