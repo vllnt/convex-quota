@@ -15,7 +15,7 @@ Node 26.7.0, pnpm 9.15.4, Convex CLI/client 1.45.0 on Darwin arm64:
   narrow max-params compatibility exceptions)
 - `pnpm typecheck` and `pnpm typecheck:ci` (source plus examples/test sources)
 - `pnpm test:coverage` (includes the published src/test.ts helper)
-- `pnpm generate:llms`
+- `pnpm generate:llms` checks the maintained `llms.txt`; review its content against the README and API reference.
 - `pnpm pack --pack-destination /tmp/quota-local-audit`
 - Extracted tarball consumer TypeScript compilation imports root, config,
   generated ComponentApi and ./test with an unrelated host schema, using
