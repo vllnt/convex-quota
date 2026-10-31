@@ -16,9 +16,9 @@ The official `@convex-dev/rate-limiter` already supports fixed windows, token
 buckets, readable status and React hooks. Prefer it for general throttling. This
 experimental component explores the narrower calendar/timezone reset and
 privileged allowance-refund surface. It is not billable metering or a persistent
-balance. Public canary builds are available; publication is not evidence of
-production readiness or independent adoption. Readable remaining alone is not a
-distinction from the official rate limiter.
+balance. Publication and passing tests are not evidence of production readiness
+or independent adoption. Readable remaining alone is not a distinction from the
+official rate limiter.
 
 ```ts
 const quota = new Quota(components.quota);
@@ -47,12 +47,12 @@ if (!r.allowed) throw new Error(`try again at ${r.resetsAt}`);
 ## Installation
 
 ```bash
-pnpm add @vllnt/convex-quota@canary
+pnpm add @vllnt/convex-quota
 ```
 
-Node.js >=22.12.0; required peer: `convex@^1.45.0`. This guide follows the
-public `canary` channel. The npm `latest` tag also currently points to a
-prerelease, not a stable release.
+Node.js >=22.12.0; required peer: `convex@^1.45.0`. Pre-release builds from
+`main` are published to the `canary` dist-tag
+(`pnpm add @vllnt/convex-quota@canary`).
 
 ## Usage
 
@@ -172,6 +172,22 @@ pnpm test:coverage
 Unit/integration tests use the **mock backend** `convex-test`
 (`@edge-runtime/vm`). They do not establish real-backend OCC or scheduler
 guarantees.
+
+### Testing your app
+
+`@vllnt/convex-quota/test` exports `register(t, name = "quota")` to mount the
+component in a `convex-test` instance. It needs `convex-test` and `vitest` (with
+Vite's `import.meta.glob`) in the consuming app:
+
+```ts
+/// <reference types="vite/client" />
+import { convexTest } from "convex-test";
+import { register } from "@vllnt/convex-quota/test";
+import schema from "./schema";
+
+const t = convexTest(schema, import.meta.glob("./**/*.ts"));
+register(t);
+```
 
 ## Contributing
 

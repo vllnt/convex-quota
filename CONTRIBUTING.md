@@ -12,12 +12,13 @@ pnpm lint
 pnpm test:coverage
 ```
 
-Use `pnpm build:codegen` only when you need to regenerate checked-in Convex `_generated` files and
-have access to the selected Convex project.
+Use `pnpm build:codegen` only when you need to regenerate checked-in Convex
+`_generated` files and have access to the selected Convex project.
 
 ## Testing
 
-Tests use [`convex-test`](https://docs.convex.dev/testing) with the `@edge-runtime/vm` environment:
+Tests use [`convex-test`](https://docs.convex.dev/testing) with the
+`@edge-runtime/vm` environment:
 
 ```bash
 pnpm test           # single run
@@ -25,24 +26,27 @@ pnpm test:watch     # watch mode
 pnpm test:coverage  # enforced 100% on covered files
 ```
 
-Coverage is gated at 100% (`vitest.config.mts`). Every public method needs a happy-path test **and**
-at least one adversarial test (auth-denied, invalid input, boundary).
+Coverage is gated at 100% (`vitest.config.mts`). Every public method needs a
+happy-path test **and** at least one adversarial test (auth-denied, invalid
+input, boundary).
 
 ## Code Style
 
 - Prettier + ESLint (run `pnpm lint` before submitting)
-- `@vllnt/eslint-config/convex` enforces: namespace separation, snake_case filenames, no bare
-  `v.any()`, require returns validators, no N+1 queries
+- `@vllnt/eslint-config/convex` enforces: namespace separation, snake_case
+  filenames, no bare `v.any()`, require returns validators, no N+1 queries
 - No `any` — use `unknown` + type guards
 - Explicit return types on public APIs
-- Mutations in `mutations.ts`, queries in `queries.ts`, validators in `validators.ts`
+- Mutations in `mutations.ts`, queries in `queries.ts`, validators in
+  `validators.ts`
 
 ## Pull Requests
 
 - Target `main`
 - One logical change per PR
 - Include tests for new behavior or bug fixes
-- Ensure all checks pass: `pnpm typecheck && pnpm lint && pnpm test:coverage && pnpm build`
+- Ensure all checks pass:
+  `pnpm typecheck && pnpm lint && pnpm test:coverage && pnpm build`
 
 ## Releases
 
@@ -57,11 +61,11 @@ trusted publishing and provenance; nothing is published from a local machine.
   `package.json`, has no changelog entry, or is not on `main`.
 - If npm succeeded but a later step failed, re-running skips the publish. An
   existing version is never overwritten; verify registry state before retrying.
-- `pnpm check:release` checks this release contract. `pnpm check:pack` builds and
-  checks the packed public exports and test helper against an unrelated host
+- `pnpm check:release` checks this release contract. `pnpm check:pack` builds
+  and checks the packed public exports and test helper against an unrelated host
   schema using the locked installed dependencies.
 
 ## Reporting Issues
 
-Use [GitHub Issues](https://github.com/vllnt/convex-quota/issues). For security vulnerabilities,
-see [SECURITY.md](./SECURITY.md).
+Use [GitHub Issues](https://github.com/vllnt/convex-quota/issues). For security
+vulnerabilities, see [SECURITY.md](./SECURITY.md).
