@@ -2,18 +2,19 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const manifest = JSON.parse(readFileSync("package.json", "utf8"));
-for (const script of Object.values(manifest.scripts)) {
-  assert.doesNotMatch(script, /npm\s+(?:publish|login)|git\s+(?:push|tag)/, "No local publication fallback");
+for (const [name, script] of Object.entries(manifest.scripts)) {
+  assert.doesNotMatch(name, /^(?:alpha|release|prepublishOnly)$/, `Unsafe release script: ${name}`);
+  assert.doesNotMatch(script, /npm\s+(?:publish|login|version)|git\s+(?:push|tag)/, `Release bypass: ${name}`);
 }
 const workflow = readFileSync(".github/workflows/publish.yml", "utf8");
 const stable = workflow.slice(workflow.indexOf("\n  release:"));
 assert.ok(stable.length > 100, "Stable job must exist");
-assert.match(stable, /github\.ref == 'refs\/heads\/main'/);
-assert.match(stable, /vars\.RELEASE_ENABLED == 'true'/);
-assert.match(stable, /contents: read/);
-assert.doesNotMatch(stable, /contents: write|inputs\.bump|npm version|git (?:commit|push|tag)|gh release|\$\{\{ steps\..*body/);
-assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'push' \}\}/);
-assert.match(stable, /npm@11 publish --tag latest --provenance --access public --ignore-scripts/);
+assert.match(stable, /startsWith\(github\.ref, 'refs\/tags\/v'\)/);
+assert.match(stable, /git merge-base --is-ancestor/);
+assert.match(stable, /--provenance/);
+assert.doesNotMatch(stable, /inputs\.bump|npm version|git (?:commit|push)/);
+assert.doesNotMatch(workflow, /NODE_AUTH_TOKEN: \$\{\{/);
+assert.match(workflow, /cancel-in-progress: false/);
 const contributing = readFileSync("CONTRIBUTING.md", "utf8");
-assert.doesNotMatch(contributing, /pnpm (?:release|alpha)|dispatch.*patch\/minor\/major/);
-console.log("PASS reviewed-version release contract");
+assert.doesNotMatch(contributing, /pnpm (?:release|alpha)|dispatch.*patch\/minor\/major|RELEASE_ENABLED/);
+console.log("PASS tag-driven release contract");

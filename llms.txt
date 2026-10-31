@@ -1,6 +1,6 @@
 # @vllnt/convex-quota
 
-> Experimental scheduled-reset per-subject allowances; public canary releases.
+> Experimental scheduled-reset per-subject allowances for Convex.
 
 Targets Node >=22.12.0 and convex@^1.45.0. One sandboxed allowance row per
 (scope, subjectRef, key) stores used, limit, periodKey, policyKey and window times.
@@ -28,8 +28,8 @@ runtime scopes isolate indexed reads/erasure within a mount. Official
 @convex-dev/rate-limiter already has fixed windows, token buckets, readable checks
 and React hooks; prefer it for general throttling. This experiment's narrower
 calendar/timezone/refund boundary still needs independent consumer justification.
-Install `@vllnt/convex-quota@canary` for the documented public prerelease surface;
-`latest` also currently points to a prerelease. Publication and passing tests do
+Install `@vllnt/convex-quota`; pre-release builds from main use the `canary`
+dist-tag. Publication and passing tests do
 not establish independent adoption or production readiness. The sole client
 option is `defaultScope` (default `"global"`); consume amount defaults to 1.
 

@@ -6,14 +6,14 @@ import {
   resolveWindow,
   windowPolicyKey,
   type WindowSpec,
-} from "../shared";
+} from "../shared.js";
 
-import { query } from "./_generated/server";
+import { query } from "./_generated/server.js";
 import {
   remainingState,
   requireAllowanceInput,
   windowSpec,
-} from "./validators";
+} from "./validators.js";
 
 function fail(code: string, message: string): never {
   throw new ConvexError({ code, message });

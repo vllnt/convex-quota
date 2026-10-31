@@ -117,6 +117,16 @@ describe("adversarial boundaries", () => {
       }
     }
   });
+  test("parallel consumes never overshoot the limit", async () => {
+    const t = setup();
+    const results = await Promise.all(
+      Array.from({ length: 20 }, () => t.mutation(api.example.consume, args)),
+    );
+    expect(results.filter((result) => result.allowed)).toHaveLength(3);
+    expect(Math.max(...results.map((result) => result.used))).toBe(3);
+    expect((await t.query(api.example.remaining, args)).used).toBe(3);
+  });
+
   test("policy changes cannot reinterpret the stored allowance", async () => {
     const t = setup();
     await t.mutation(api.example.consume, args);

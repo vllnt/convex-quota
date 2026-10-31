@@ -31,7 +31,11 @@ declare const api: ComponentApi;
 new Quota(api);
 void component;
 `);
-  run(resolve(root, "node_modules/.bin/tsc"), ["--ignoreConfig", "--noEmit", "--module", "ESNext", "--moduleResolution", "Bundler", "--target", "ES2024", "--skipLibCheck", "check.ts"], temporary);
+  writeFileSync(join(temporary, "package.json"), JSON.stringify({ type: "module" }));
+  // Consumers resolve the shipped TypeScript sources under both resolution modes.
+  for (const [module, moduleResolution] of [["ESNext", "Bundler"], ["NodeNext", "NodeNext"]]) {
+    run(resolve(root, "node_modules/.bin/tsc"), ["--ignoreConfig", "--noEmit", "--module", module, "--moduleResolution", moduleResolution, "--target", "ES2024", "--skipLibCheck", "check.ts"], temporary);
+  }
   run(process.execPath, ["--input-type=module", "-e", "import {Quota} from '@vllnt/convex-quota'; if(typeof Quota !== 'function') throw Error('Missing Quota');"], temporary);
   console.log("PASS packed runtime exports and unrelated-host test helper typing");
 } finally {
