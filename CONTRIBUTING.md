@@ -46,20 +46,20 @@ at least one adversarial test (auth-denied, invalid input, boundary).
 
 ## Releases
 
-Maintainers only:
+Maintainers only. Every publish runs in `.github/workflows/publish.yml` with npm
+trusted publishing and provenance; nothing is published from a local machine.
 
-- Prepare version and changelog changes in a signed, reviewed PR.
-- After review and adoption gates clear, dispatch `.github/workflows/publish.yml`
-  from `main` with `RELEASE_ENABLED=true` to publish the reviewed package.json
-  version. Dispatch never bumps versions, commits, tags, or creates releases.
-- No local stable publishing fallback. The explicit [first-canary bootstrap](docs/FIRST_CANARY.md)
-  is the only local publication command; it defaults to dry run and cannot publish stable.
-  Run `pnpm check:release` to check the release contract and bootstrap regressions.
-- For uncertain or failed publication, inspect registry version/provenance before
-  retrying; never overwrite a version or bump blindly. See
-  [verification and recovery](docs/VERIFICATION.md).
-- `pnpm check:pack` builds and checks the packed public exports and test helper
-  against an unrelated host schema using the locked installed dependencies.
+- Canary (`@canary`): pushes to `main` publish one when the `CANARY_ENABLED`
+  repository variable is `true`; otherwise run the workflow manually on `main`.
+- Stable (`@latest`): merge a PR that sets `package.json` `version` and adds a
+  matching `## [X.Y.Z]` entry to `CHANGELOG.md`, then push the tag `vX.Y.Z` on
+  that `main` commit. The workflow refuses a tag that does not match
+  `package.json`, has no changelog entry, or is not on `main`.
+- If npm succeeded but a later step failed, re-running skips the publish. An
+  existing version is never overwritten; verify registry state before retrying.
+- `pnpm check:release` checks this release contract. `pnpm check:pack` builds and
+  checks the packed public exports and test helper against an unrelated host
+  schema using the locked installed dependencies.
 
 ## Reporting Issues
 

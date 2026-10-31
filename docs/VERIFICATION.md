@@ -63,14 +63,12 @@ _generated paths; no generated binding was manually edited.
 
 ## Release recovery
 
-Stable dispatch requires main and RELEASE_ENABLED=true; leave this unset until
-review and adoption gates clear. Stable runs are serialized and not automatically
-cancelled. Canary runs may cancel. Stable publication uses the already-reviewed
-package.json version; version and changelog changes require a normal signed PR.
-The stable job has read-only repository permissions and never commits, bumps,
-tags or creates GitHub releases. Local alpha/release and interactive login scripts
-have been removed. `pnpm check:release`, included in lint, guards these invariants. There is no commit-controlled release-note
-interpolation into shell source.
+Stable (`@latest`) publication runs only from a pushed `vX.Y.Z` tag whose commit
+is on `main` and matches `package.json` and a `CHANGELOG.md` entry; runs are
+serialized and never automatically cancelled. Version and changelog changes go
+through a normal reviewed PR. Publishing uses npm trusted publishing (OIDC) with
+provenance and no token. Local alpha/release and login scripts do not exist.
+`pnpm check:release`, included in lint, guards these invariants.
 
 If publication fails or completion is uncertain, do NOT bump or rerun blindly.
 A maintainer must compare the registry artifact and provenance with the exact
