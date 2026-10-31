@@ -1,6 +1,5 @@
 import { base } from "@vllnt/eslint-config";
 import convex from "@vllnt/eslint-config/convex";
-import tseslint from "typescript-eslint";
 
 export default [
   { ignores: ["dist/**", "**/_generated/**", "coverage/**"] },
@@ -10,9 +9,6 @@ export default [
   {
     files: ["src/component/**/*.ts"],
     ignores: ["src/component/_generated/**"],
-    languageOptions: {
-      parser: tseslint.parser,
-    },
     rules: {
       "convex-rules/standard-filenames": "error",
       "convex-rules/namespace-separation": "error",

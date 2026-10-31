@@ -1,7 +1,7 @@
 {
   "name": "@vllnt/convex-quota",
   "version": "0.1.0",
-  "description": "Scheduled-reset per-subject allowances as a Convex component \u2014 calendar, rolling, or epoch windows with readable remaining",
+  "description": "Scheduled-reset per-subject allowances as a Convex component — calendar, rolling, or epoch windows with readable remaining",
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@10.34.8",
@@ -71,13 +71,16 @@
     "vitest": "^5.0.5"
   },
   "pnpm": {
+    "minimumReleaseAge": 10080,
+    "minimumReleaseAgeExclude": [
+      "@vllnt/*"
+    ],
+    "ignoredBuiltDependencies": [
+      "esbuild"
+    ],
     "overrides": {
-      "brace-expansion@<1.1.21": "^1.1.21",
-      "brace-expansion@>=4.0.0 <5.0.12": "^5.0.12",
-      "deepmerge-ts@<8.0.0": "^8.0.0",
-      "handlebars@<4.7.10": "^4.7.10",
-      "source-map-js@<1.2.2": "^1.2.2",
-      "zod@<4.6.6": "^4.6.6"
+      "deepmerge-ts@<8.0.0": "^8.0.2",
+      "handlebars@<4.7.10": "^4.7.10"
     }
   },
   "homepage": "https://github.com/vllnt/convex-quota#readme",
