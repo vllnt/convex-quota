@@ -8,18 +8,18 @@ import {
   resolveWindow,
   windowPolicyKey,
   type WindowSpec,
-} from "../shared";
+} from "../shared.js";
 
-import { api } from "./_generated/api";
-import type { Doc as Document_ } from "./_generated/dataModel";
-import { mutation, type MutationCtx } from "./_generated/server";
+import { api } from "./_generated/api.js";
+import type { Doc as Document_ } from "./_generated/dataModel.js";
+import { mutation, type MutationCtx } from "./_generated/server.js";
 import {
   consumeResult,
   requireAllowanceInput,
   requirePositiveInt,
   requireRef,
   windowSpec,
-} from "./validators";
+} from "./validators.js";
 
 function fail(code: string, message: string): never {
   throw new ConvexError({ code, message });

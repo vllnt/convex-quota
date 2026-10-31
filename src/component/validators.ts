@@ -1,6 +1,6 @@
 import { ConvexError, v } from "convex/values";
 
-import { MAX_REF_LENGTH } from "../shared";
+import { MAX_REF_LENGTH } from "../shared.js";
 
 export function requireRef(value: string, name: string): void {
   if (value.length === 0 || value.length > MAX_REF_LENGTH) {
