@@ -94,7 +94,8 @@ host identity.
 **Host rules:**
 
 - Never take `limit` or `amount` from the end-user. The host supplies them.
-- `consume` is not idempotent. Wrap retries with `@vllnt/convex-idempotency`.
+- `consume` is not idempotent. Pair it with `@vllnt/convex-idempotency` (see
+  [Retries and idempotency](#retries-and-idempotency)).
 - `refund` is privileged and **not idempotent**. Deduplicate refund events in
   the host transaction; `periodKey` is a window label, not a receipt or replay
   token.
@@ -127,6 +128,95 @@ codes.
 | `eraseSubject(ctx, subjectRef, scope?, batch?)`           | mutation | `number` deleted this pass                                 |
 
 Full reference: [docs/API.md](docs/API.md).
+
+## Retries and idempotency
+
+`consume` is not idempotent: a retried mutation consumes again. When a retry
+must not double-count, claim the request with `@vllnt/convex-idempotency` inside
+the **same host mutation**. The claim, the consume and the completion commit or
+roll back together, so a failed attempt leaves nothing behind and a successful
+one is replayed instead of re-run.
+
+```ts
+// convex/convex.config.ts — mount both components
+import idempotency from "@vllnt/convex-idempotency/convex.config";
+app.use(quota);
+app.use(idempotency);
+```
+
+```ts
+// convex/plays.ts
+import { v } from "convex/values";
+import { Idempotency } from "@vllnt/convex-idempotency";
+import { Quota, type ConsumeResult } from "@vllnt/convex-quota";
+import { components } from "./_generated/api";
+import { mutation } from "./_generated/server";
+
+const quota = new Quota(components.quota);
+const consumeIdempotency = new Idempotency<ConsumeResult>(
+  components.idempotency,
+);
+const DAILY_PLAYS = 5;
+const daily = {
+  kind: "calendar",
+  period: "day",
+  timeZone: "Europe/Paris",
+} as const;
+const consumeResult = v.object({
+  allowed: v.boolean(),
+  limit: v.number(),
+  periodKey: v.string(),
+  remaining: v.number(),
+  resetsAt: v.number(),
+  used: v.number(),
+});
+
+export const play = mutation({
+  args: { requestId: v.string() },
+  returns: consumeResult,
+  handler: async (ctx, { requestId }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+    const scope = identity.tokenIdentifier; // dedupe per caller
+    const claim = await consumeIdempotency.begin(ctx, requestId, { scope });
+    if (claim.state === "done" && claim.result !== undefined) {
+      return claim.result;
+    }
+    if (claim.state !== "fresh") throw new Error("Retry shortly");
+    const result = await quota.consume(
+      ctx,
+      identity.tokenIdentifier,
+      "plays",
+      DAILY_PLAYS,
+      daily,
+    );
+    const done = await consumeIdempotency.complete(ctx, requestId, result, {
+      scope,
+      claimId: claim.claimId,
+    });
+    if (!done.recorded) throw new Error(`Claim lost: ${done.reason}`);
+    return result;
+  },
+});
+```
+
+This exact pattern is exercised in
+[`example/convex/idempotency.test.ts`](example/convex/idempotency.test.ts): a
+duplicate `requestId` replays the stored result and consumes once, a new
+`requestId` consumes again, the caller `scope` isolates identical request ids,
+and a host failure after `consume` rolls back both the allowance and the claim.
+
+Caveats:
+
+- A denied consume (`allowed: false`) is recorded too, so a replay returns the
+  same denial even if the allowance was freed in between.
+- The claim lives for the idempotency component's done-grace TTL (24 hours by
+  default). A retry after that is a new request and consumes again, so pick a
+  TTL longer than your clients' retry horizon.
+- Do no external work between `begin` and `complete`. Keep it to transactional
+  host writes; use a separate action for network calls.
+- Deduplicate `refund` events the same way, with a key distinct from the consume
+  request (the example uses `refund:${requestId}`).
 
 ## Multiple mounts
 
