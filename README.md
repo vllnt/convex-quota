@@ -35,7 +35,7 @@ if (!r.allowed) throw new Error(`try again at ${r.resetsAt}`);
 
 ## Features
 
-- **Readable remaining** — both return
+- **Readable remaining** — `consume` and `remaining` both return
   `{ used, remaining, limit, periodKey, resetsAt }`; only `consume` includes
   `allowed`.
 - **Window kinds** — calendar (`day` / `week` / `month` + IANA timezone),
@@ -53,9 +53,9 @@ if (!r.allowed) throw new Error(`try again at ${r.resetsAt}`);
 pnpm add @vllnt/convex-quota
 ```
 
-Node.js >=22.12.0; required peer: `convex@^1.45.0`. The `latest` dist-tag is the
-stable release. Builds from `main` are opt-in on the `canary` dist-tag
-(`pnpm add @vllnt/convex-quota@canary`).
+Node.js >=22.12.0; required peer: `convex@^1.45.0`. Stable releases are
+published to the `latest` dist-tag with npm provenance. Unreleased builds from
+`main` go to the `canary` dist-tag (`pnpm add @vllnt/convex-quota@canary`).
 
 ## Usage
 

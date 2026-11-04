@@ -11,8 +11,10 @@ First stable release.
 ### Added
 
 - `Quota` client with `consume`, `remaining`, `refund` and `eraseSubject`
-  (batched, reschedules until clean). Results carry
-  `{ used, remaining, limit, periodKey, resetsAt }`; `consume` adds `allowed`.
+  (batched, reschedules until clean). `consume` returns
+  `{ allowed, used, remaining, limit, periodKey, resetsAt }`, `remaining` the
+  same without `allowed`, `refund` `{ refunded, used, remaining }`, and
+  `eraseSubject` the number of rows deleted in that pass.
 - Window kinds: calendar (`day` / `week` / `month` in an IANA timezone, Monday
   or Sunday week start), rolling (starts at the first allowed consume) and
   epoch. Time is read on the server. Skipped and repeated civil midnights

@@ -27,9 +27,10 @@ Host owns auth, authorization and all policy. Multiple named mounts isolate data
 runtime scopes isolate indexed reads/erasure within a mount. For general
 throttling (token buckets, fixed windows, React hooks) use the official
 @convex-dev/rate-limiter; use this component for scheduled-reset allowances with
-a readable remaining. Install `@vllnt/convex-quota`; the `latest` dist-tag is
-the stable release and builds from main are opt-in on `canary`. The sole client
-option is `defaultScope` (default `"global"`); consume amount defaults to 1.
+a readable remaining. Install `@vllnt/convex-quota`; stable releases are published
+to the `latest` dist-tag with npm provenance, unreleased builds from main go to
+`canary`. The sole client option is `defaultScope` (default `"global"`); consume
+amount defaults to 1.
 
 ## Docs
 
