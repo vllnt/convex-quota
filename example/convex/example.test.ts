@@ -274,7 +274,7 @@ describe("quota — validation", () => {
         limit: 1,
         window: dayUtc,
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("INVALID_REF");
     await expect(
       t.mutation(api.example.consume, {
         subjectRef: "u1",
@@ -282,7 +282,7 @@ describe("quota — validation", () => {
         limit: 1,
         window: dayUtc,
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("INVALID_REF");
     await expect(
       t.mutation(api.example.consume, {
         subjectRef: "x".repeat(MAX_REF_LENGTH + 1),
@@ -290,7 +290,7 @@ describe("quota — validation", () => {
         limit: 1,
         window: dayUtc,
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("INVALID_REF");
   });
 
   test("non-positive limit and amount are rejected", async () => {
@@ -302,7 +302,7 @@ describe("quota — validation", () => {
         limit: 0,
         window: dayUtc,
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("INVALID_LIMIT");
     await expect(
       t.mutation(api.example.consume, {
         subjectRef: "u1",
@@ -311,7 +311,7 @@ describe("quota — validation", () => {
         amount: 0,
         window: dayUtc,
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("INVALID_AMOUNT");
   });
 
   test("invalid duration is rejected", async () => {
@@ -323,7 +323,7 @@ describe("quota — validation", () => {
         limit: 1,
         window: { kind: "rolling", durationMs: -1 },
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("INVALID_DURATION");
     await expect(
       t.query(api.example.remaining, {
         subjectRef: "u1",
@@ -331,7 +331,7 @@ describe("quota — validation", () => {
         limit: 1,
         window: { kind: "epoch", durationMs: 0 },
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("INVALID_DURATION");
   });
 
   test("invalid time zone is rejected", async () => {
@@ -343,7 +343,7 @@ describe("quota — validation", () => {
         limit: 1,
         window: { kind: "calendar", period: "day", timeZone: "Not/AZone" },
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("INVALID_TIME_ZONE");
     await expect(
       t.query(api.example.remaining, {
         subjectRef: "u1",
@@ -351,7 +351,7 @@ describe("quota — validation", () => {
         limit: 1,
         window: { kind: "calendar", period: "day", timeZone: "Not/AZone" },
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("INVALID_TIME_ZONE");
   });
 
   test("refund rejects empty refs and bad amounts", async () => {
@@ -363,7 +363,7 @@ describe("quota — validation", () => {
         amount: 1,
         periodKey: "x",
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("INVALID_REF");
     await expect(
       t.mutation(api.example.refund, {
         subjectRef: "u1",
@@ -371,7 +371,7 @@ describe("quota — validation", () => {
         amount: 1,
         periodKey: "x",
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("INVALID_REF");
     await expect(
       t.mutation(api.example.refund, {
         subjectRef: "u1",
@@ -379,20 +379,20 @@ describe("quota — validation", () => {
         amount: 0,
         periodKey: "x",
       }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("INVALID_AMOUNT");
   });
 
   test("eraseSubject rejects empty subjectRef and bad batch", async () => {
     const t = setup();
     await expect(
       t.mutation(api.example.eraseSubject, { subjectRef: "" }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("INVALID_REF");
     await expect(
       t.mutation(api.example.eraseSubject, { subjectRef: "u1", batch: 0 }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("INVALID_BATCH");
     await expect(
       t.mutation(api.example.eraseSubject, { subjectRef: "u1", batch: 1.5 }),
-    ).rejects.toThrow();
+    ).rejects.toThrow("INVALID_BATCH");
     expect(
       await t.mutation(api.example.eraseSubject, {
         subjectRef: "nobody",
