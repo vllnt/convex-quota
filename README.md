@@ -12,13 +12,16 @@ Scheduled-reset per-subject allowances as a Convex component.
 Readable remaining in a window — calendar day/week/month, rolling, or epoch.
 Daily/weekly play caps, free-tier slots, Codex-style limits.
 
-The official `@convex-dev/rate-limiter` already supports fixed windows, token
-buckets, readable status and React hooks. Prefer it for general throttling. This
-experimental component explores the narrower calendar/timezone reset and
-privileged allowance-refund surface. It is not billable metering or a persistent
-balance. Publication and passing tests are not evidence of production readiness
-or independent adoption. Readable remaining alone is not a distinction from the
-official rate limiter.
+## When to use it
+
+Use it for allowances that reset on a schedule and that your UI needs to read:
+"3 plays left today", a weekly cap in the subject's own timezone, free-tier
+slots, a refund when an action is cancelled.
+
+- General throttling (token buckets, fixed windows, React hooks): use the
+  official `@convex-dev/rate-limiter`.
+- Billable usage records: use `@vllnt/convex-metering`.
+- Balances that persist and are spent down: use `@vllnt/convex-wallet`.
 
 ```ts
 const quota = new Quota(components.quota);
@@ -50,8 +53,8 @@ if (!r.allowed) throw new Error(`try again at ${r.resetsAt}`);
 pnpm add @vllnt/convex-quota
 ```
 
-Node.js >=22.12.0; required peer: `convex@^1.45.0`. Pre-release builds from
-`main` are published to the `canary` dist-tag
+Node.js >=22.12.0; required peer: `convex@^1.45.0`. The `latest` dist-tag is the
+stable release. Builds from `main` are opt-in on the `canary` dist-tag
 (`pnpm add @vllnt/convex-quota@canary`).
 
 ## Usage
@@ -66,30 +69,57 @@ app.use(quota);
 export default app;
 ```
 
+The host authenticates, derives the `subjectRef`, and owns the limit and window.
+The component never sees the end-user's request.
+
 ```ts
+// convex/plays.ts
+import { v } from "convex/values";
 import { components } from "./_generated/api";
-import { mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { Quota } from "@vllnt/convex-quota";
 
 const quota = new Quota(components.quota);
+const DAILY_PLAYS = 5; // host-owned, never from the client
+const daily = {
+  kind: "calendar",
+  period: "day",
+  timeZone: "Europe/Paris",
+} as const;
 
 export const play = mutation({
   args: {},
+  returns: v.null(),
   handler: async (ctx) => {
-    const subjectRef = /* host-resolved identity */ "user_1";
-    const r = await quota.consume(ctx, subjectRef, "plays", 5, {
-      kind: "calendar",
-      period: "day",
-      timeZone: "Europe/Paris",
-    });
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+    const subjectRef = identity.tokenIdentifier;
+    const r = await quota.consume(ctx, subjectRef, "plays", DAILY_PLAYS, daily);
     if (!r.allowed) throw new Error("daily cap reached");
+    return null;
+  },
+});
+
+export const playsLeft = query({
+  args: {},
+  returns: v.object({ remaining: v.number(), resetsAt: v.number() }),
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+    const { remaining, resetsAt } = await quota.remaining(
+      ctx,
+      identity.tokenIdentifier,
+      "plays",
+      DAILY_PLAYS,
+      daily,
+    );
+    return { remaining, resetsAt };
   },
 });
 ```
 
 After mounting, run `pnpm convex dev` to generate the host's component
-references. Replace the illustrative identity with authenticated, authorized
-host identity.
+references.
 
 **Host rules:**
 

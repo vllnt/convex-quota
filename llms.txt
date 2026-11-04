@@ -1,6 +1,6 @@
 # @vllnt/convex-quota
 
-> Experimental scheduled-reset per-subject allowances for Convex.
+> Scheduled-reset per-subject allowances for Convex.
 
 Targets Node >=22.12.0 and convex@^1.45.0. One sandboxed allowance row per
 (scope, subjectRef, key) stores used, limit, periodKey, policyKey and window times.
@@ -24,20 +24,18 @@ batches default to 200 and cap at 500, scheduling continuation when full. Hosts
 must stop concurrent writes while cleanup drains. No tombstones or audit history.
 
 Host owns auth, authorization and all policy. Multiple named mounts isolate data;
-runtime scopes isolate indexed reads/erasure within a mount. Official
-@convex-dev/rate-limiter already has fixed windows, token buckets, readable checks
-and React hooks; prefer it for general throttling. This experiment's narrower
-calendar/timezone/refund boundary still needs independent consumer justification.
-Install `@vllnt/convex-quota`; pre-release builds from main use the `canary`
-dist-tag. Publication and passing tests do
-not establish independent adoption or production readiness. The sole client
+runtime scopes isolate indexed reads/erasure within a mount. For general
+throttling (token buckets, fixed windows, React hooks) use the official
+@convex-dev/rate-limiter; use this component for scheduled-reset allowances with
+a readable remaining. Install `@vllnt/convex-quota`; the `latest` dist-tag is
+the stable release and builds from main are opt-in on `canary`. The sole client
 option is `defaultScope` (default `"global"`); consume amount defaults to 1.
 
 ## Docs
 
 - [README](README.md): Setup, behavior, security, multi-mount and limitations
 - [API Reference](docs/API.md): Exact signatures, results and error semantics
-- [Changelog](CHANGELOG.md): Unreleased changes and development schema migration
+- [Changelog](CHANGELOG.md): Release notes
 - [Contributing](CONTRIBUTING.md): Development workflow
 - [Example wrapper](example/convex/example.ts): Unauthenticated test fixtures, not production endpoints
 - [Tests](example/convex/example.test.ts): convex-test mock integration tests, not real OCC proof
