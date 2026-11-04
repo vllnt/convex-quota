@@ -164,3 +164,34 @@ describe("consume paired with @vllnt/convex-idempotency in one host mutation", (
     ).rejects.toThrow("Unauthenticated");
   });
 });
+
+describe("idempotency keys are namespaced per operation", () => {
+  test("a consume requestId that looks like a refund key does not collide with the refund", async () => {
+    const t = setup();
+    const alice = caller(t, "alice");
+    const played = await alice.as.mutation(api.example.play, {
+      requestId: "refund:x",
+    });
+    const refund = await alice.as.mutation(api.example.cancelPlay, {
+      requestId: "x",
+      periodKey: played.periodKey,
+    });
+    expect(refund).toMatchObject({ refunded: true, used: 0 });
+    expect(await used(t, alice.tokenIdentifier)).toBe(0);
+  });
+
+  test("a refund requestId does not replay into a consume of the same string", async () => {
+    const t = setup();
+    const alice = caller(t, "alice");
+    const refund = await alice.as.mutation(api.example.cancelPlay, {
+      requestId: "x",
+      periodKey: "unused",
+    });
+    expect(refund).toMatchObject({ refunded: false });
+    const played = await alice.as.mutation(api.example.play, {
+      requestId: "refund:x",
+    });
+    expect(played).toMatchObject({ allowed: true, used: 1 });
+    expect(await used(t, alice.tokenIdentifier)).toBe(1);
+  });
+});

@@ -137,6 +137,12 @@ the **same host mutation**. The claim, the consume and the completion commit or
 roll back together, so a failed attempt leaves nothing behind and a successful
 one is replayed instead of re-run.
 
+Install it next to this component:
+
+```bash
+pnpm add @vllnt/convex-idempotency
+```
+
 ```ts
 // convex/convex.config.ts — mount both components
 import idempotency from "@vllnt/convex-idempotency/convex.config";
@@ -178,7 +184,8 @@ export const play = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthenticated");
     const scope = identity.tokenIdentifier; // dedupe per caller
-    const claim = await consumeIdempotency.begin(ctx, requestId, { scope });
+    const key = `consume:${requestId}`; // namespaced per operation
+    const claim = await consumeIdempotency.begin(ctx, key, { scope });
     if (claim.state === "done" && claim.result !== undefined) {
       return claim.result;
     }
@@ -190,7 +197,7 @@ export const play = mutation({
       DAILY_PLAYS,
       daily,
     );
-    const done = await consumeIdempotency.complete(ctx, requestId, result, {
+    const done = await consumeIdempotency.complete(ctx, key, result, {
       scope,
       claimId: claim.claimId,
     });
@@ -215,8 +222,10 @@ Caveats:
   TTL longer than your clients' retry horizon.
 - Do no external work between `begin` and `complete`. Keep it to transactional
   host writes; use a separate action for network calls.
-- Deduplicate `refund` events the same way, with a key distinct from the consume
-  request (the example uses `refund:${requestId}`).
+- Namespace the idempotency key per operation (`consume:${requestId}`,
+  `refund:${requestId}`). The ledger is keyed by caller scope and key only, so
+  two operations sharing a key would replay each other's stored result.
+- Deduplicate `refund` events the same way, under the `refund:` namespace.
 
 ## Multiple mounts
 

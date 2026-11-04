@@ -55,11 +55,12 @@ consuming. The tested host mutation is `play` in
 and the README section "Retries and idempotency" shows it in full.
 
 ```ts
-const claim = await consumeIdempotency.begin(ctx, requestId, { scope });
+const key = `consume:${requestId}`; // namespaced per operation
+const claim = await consumeIdempotency.begin(ctx, key, { scope });
 if (claim.state === "done" && claim.result !== undefined) return claim.result;
 if (claim.state !== "fresh") throw new Error("Retry shortly");
 const result = await quota.consume(ctx, subjectRef, "plays", 5, daily);
-const done = await consumeIdempotency.complete(ctx, requestId, result, {
+const done = await consumeIdempotency.complete(ctx, key, result, {
   scope,
   claimId: claim.claimId,
 });
@@ -68,6 +69,9 @@ return result;
 ```
 
 - Use a per-caller `scope` so one caller's `requestId` cannot replay another's.
+- Namespace the key per operation (`consume:${requestId}`,
+  `refund:${requestId}`): the ledger is keyed by scope and key only, so a shared
+  key would replay another operation's stored result.
 - A denied consume is recorded and replayed as a denial.
 - The claim expires with the idempotency done-grace TTL (24 hours by default); a
   retry after that consumes again.

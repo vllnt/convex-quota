@@ -153,7 +153,8 @@ export const play = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthenticated");
     const scope = identity.tokenIdentifier; // dedupe per caller
-    const claim = await consumeIdempotency.begin(ctx, requestId, { scope });
+    const key = `consume:${requestId}`; // namespaced per operation
+    const claim = await consumeIdempotency.begin(ctx, key, { scope });
     if (claim.state === "done" && claim.result !== undefined) {
       return claim.result;
     }
@@ -165,7 +166,7 @@ export const play = mutation({
       DAILY_PLAYS,
       daily,
     );
-    const done = await consumeIdempotency.complete(ctx, requestId, result, {
+    const done = await consumeIdempotency.complete(ctx, key, result, {
       scope,
       claimId: claim.claimId,
     });
@@ -182,7 +183,7 @@ export const playThenFail = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthenticated");
     const scope = identity.tokenIdentifier;
-    await consumeIdempotency.begin(ctx, requestId, { scope });
+    await consumeIdempotency.begin(ctx, `consume:${requestId}`, { scope });
     await quota.consume(
       ctx,
       identity.tokenIdentifier,
@@ -205,7 +206,7 @@ export const cancelPlay = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthenticated");
     const scope = identity.tokenIdentifier;
-    const key = `refund:${requestId}`; // distinct from the consume request
+    const key = `refund:${requestId}`; // namespaced per operation
     const claim = await refundIdempotency.begin(ctx, key, { scope });
     if (claim.state === "done" && claim.result !== undefined) {
       return claim.result;
