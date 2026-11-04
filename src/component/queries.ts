@@ -1,35 +1,15 @@
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 
-import {
-  interpretWindowError,
-  type ResolvedWindow,
-  resolveWindow,
-  windowPolicyKey,
-  type WindowSpec,
-} from "../shared.js";
+import { windowPolicyKey } from "../shared.js";
 
 import { query } from "./_generated/server.js";
 import {
+  currentWindow,
+  fail,
   remainingState,
   requireAllowanceInput,
   windowSpec,
 } from "./validators.js";
-
-function fail(code: string, message: string): never {
-  throw new ConvexError({ code, message });
-}
-
-function currentWindow(
-  spec: WindowSpec,
-  rollingStartAt: number | undefined,
-): ResolvedWindow {
-  try {
-    return resolveWindow(Date.now(), spec, rollingStartAt);
-  } catch (error) {
-    const parsed = interpretWindowError(error);
-    fail(parsed.code, parsed.message);
-  }
-}
 
 export const remaining = query({
   args: {
