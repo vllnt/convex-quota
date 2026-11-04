@@ -1,7 +1,7 @@
 import { register as registerIdempotency } from "@vllnt/convex-idempotency/test";
 import { convexTest } from "convex-test";
-import { describe, expect, test } from "vitest";
-import { api } from "./_generated/api";
+import { describe, expect, expectTypeOf, test } from "vitest";
+import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { register } from "../../src/test";
 
@@ -105,7 +105,8 @@ describe("consume paired with @vllnt/convex-idempotency in one host mutation", (
     });
     expect(denied).toMatchObject({ allowed: false, used: 5, remaining: 0 });
     // Free a unit: a fresh requestId would now be allowed, the replay must not be.
-    await alice.as.mutation(api.example.cancelPlay, {
+    await t.mutation(internal.example.refundPlay, {
+      subjectRef: alice.tokenIdentifier,
       requestId: "free-one",
       periodKey: denied.periodKey,
     });
@@ -139,18 +140,21 @@ describe("consume paired with @vllnt/convex-idempotency in one host mutation", (
       requestId: "req-1",
     });
     await alice.as.mutation(api.example.play, { requestId: "req-2" });
-    const refund = await alice.as.mutation(api.example.cancelPlay, {
+    const refund = await t.mutation(internal.example.refundPlay, {
+      subjectRef: alice.tokenIdentifier,
       requestId: "req-1",
       periodKey: first.periodKey,
     });
     expect(refund).toMatchObject({ refunded: true, used: 1 });
-    const replay = await alice.as.mutation(api.example.cancelPlay, {
+    const replay = await t.mutation(internal.example.refundPlay, {
+      subjectRef: alice.tokenIdentifier,
       requestId: "req-1",
       periodKey: first.periodKey,
     });
     expect(replay).toEqual(refund);
     expect(await used(t, alice.tokenIdentifier)).toBe(1);
-    await alice.as.mutation(api.example.cancelPlay, {
+    await t.mutation(internal.example.refundPlay, {
+      subjectRef: alice.tokenIdentifier,
       requestId: "req-2",
       periodKey: first.periodKey,
     });
@@ -172,7 +176,8 @@ describe("idempotency keys are namespaced per operation", () => {
     const played = await alice.as.mutation(api.example.play, {
       requestId: "refund:x",
     });
-    const refund = await alice.as.mutation(api.example.cancelPlay, {
+    const refund = await t.mutation(internal.example.refundPlay, {
+      subjectRef: alice.tokenIdentifier,
       requestId: "x",
       periodKey: played.periodKey,
     });
@@ -183,7 +188,8 @@ describe("idempotency keys are namespaced per operation", () => {
   test("a refund requestId does not replay into a consume of the same string", async () => {
     const t = setup();
     const alice = caller(t, "alice");
-    const refund = await alice.as.mutation(api.example.cancelPlay, {
+    const refund = await t.mutation(internal.example.refundPlay, {
+      subjectRef: alice.tokenIdentifier,
       requestId: "x",
       periodKey: "unused",
     });
@@ -193,5 +199,13 @@ describe("idempotency keys are namespaced per operation", () => {
     });
     expect(played).toMatchObject({ allowed: true, used: 1 });
     expect(await used(t, alice.tokenIdentifier)).toBe(1);
+  });
+});
+
+describe("refunds are privileged", () => {
+  test("the refund is internal and absent from the public api", () => {
+    // Checked by tsc (typecheck:ci): a public reference would fail to compile.
+    expectTypeOf(api.example).not.toHaveProperty("refundPlay");
+    expectTypeOf(internal.example).toHaveProperty("refundPlay");
   });
 });

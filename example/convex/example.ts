@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { components } from "./_generated/api";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { Idempotency } from "@vllnt/convex-idempotency";
 import { Quota, type ConsumeResult, type RefundResult } from "../../src/client";
 import { windowSpec } from "../../src/component/validators";
@@ -195,30 +195,29 @@ export const playThenFail = mutation({
   },
 });
 
-export const cancelPlay = mutation({
-  args: { requestId: v.string(), periodKey: v.string() },
+// Refunds are privileged: internal, so only trusted host code (a webhook or a
+// scheduled job after a verified cancellation) can call it. The caller derives
+// `subjectRef` and `periodKey` from its own record of the play.
+export const refundPlay = internalMutation({
+  args: {
+    subjectRef: v.string(),
+    requestId: v.string(),
+    periodKey: v.string(),
+  },
   returns: v.object({
     refunded: v.boolean(),
     used: v.number(),
     remaining: v.number(),
   }),
-  handler: async (ctx, { requestId, periodKey }) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
-    const scope = identity.tokenIdentifier;
+  handler: async (ctx, { subjectRef, requestId, periodKey }) => {
+    const scope = subjectRef;
     const key = `refund:${requestId}`; // namespaced per operation
     const claim = await refundIdempotency.begin(ctx, key, { scope });
     if (claim.state === "done" && claim.result !== undefined) {
       return claim.result;
     }
     if (claim.state !== "fresh") throw new Error("Retry shortly");
-    const result = await quota.refund(
-      ctx,
-      identity.tokenIdentifier,
-      "plays",
-      1,
-      periodKey,
-    );
+    const result = await quota.refund(ctx, subjectRef, "plays", 1, periodKey);
     const done = await refundIdempotency.complete(ctx, key, result, {
       scope,
       claimId: claim.claimId,

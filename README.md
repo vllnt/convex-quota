@@ -184,9 +184,13 @@ app.use(idempotency);
 // convex/plays.ts
 import { v } from "convex/values";
 import { Idempotency } from "@vllnt/convex-idempotency";
-import { Quota, type ConsumeResult } from "@vllnt/convex-quota";
+import {
+  Quota,
+  type ConsumeResult,
+  type RefundResult,
+} from "@vllnt/convex-quota";
 import { components } from "./_generated/api";
-import { mutation } from "./_generated/server";
+import { internalMutation, mutation } from "./_generated/server";
 
 const quota = new Quota(components.quota);
 const consumeIdempotency = new Idempotency<ConsumeResult>(
@@ -237,11 +241,50 @@ export const play = mutation({
 });
 ```
 
+Refunds are privileged; trigger them only from verified host events. Expose them
+as an `internalMutation` that a trusted caller (a webhook or a scheduled job
+after a verified cancellation) invokes with values from the host's own record of
+the play, never with a public argument chosen by the end user:
+
+```ts
+const refundIdempotency = new Idempotency<RefundResult>(components.idempotency);
+
+export const refundPlay = internalMutation({
+  args: {
+    subjectRef: v.string(), // from the host's record of the play
+    requestId: v.string(), // the request being cancelled
+    periodKey: v.string(), // from the same record
+  },
+  returns: v.object({
+    refunded: v.boolean(),
+    used: v.number(),
+    remaining: v.number(),
+  }),
+  handler: async (ctx, { subjectRef, requestId, periodKey }) => {
+    const scope = subjectRef;
+    const key = `refund:${requestId}`; // namespaced per operation
+    const claim = await refundIdempotency.begin(ctx, key, { scope });
+    if (claim.state === "done" && claim.result !== undefined) {
+      return claim.result;
+    }
+    if (claim.state !== "fresh") throw new Error("Retry shortly");
+    const result = await quota.refund(ctx, subjectRef, "plays", 1, periodKey);
+    const done = await refundIdempotency.complete(ctx, key, result, {
+      scope,
+      claimId: claim.claimId,
+    });
+    if (!done.recorded) throw new Error(`Claim lost: ${done.reason}`);
+    return result;
+  },
+});
+```
+
 This exact pattern is exercised in
 [`example/convex/idempotency.test.ts`](example/convex/idempotency.test.ts): a
 duplicate `requestId` replays the stored result and consumes once, a new
-`requestId` consumes again, the caller `scope` isolates identical request ids,
-and a host failure after `consume` rolls back both the allowance and the claim.
+`requestId` consumes again, the caller `scope` isolates identical request ids, a
+host failure after `consume` rolls back both the allowance and the claim, and a
+refund event deduplicated by `requestId` refunds once.
 
 Caveats:
 
@@ -255,7 +298,8 @@ Caveats:
 - Namespace the idempotency key per operation (`consume:${requestId}`,
   `refund:${requestId}`). The ledger is keyed by caller scope and key only, so
   two operations sharing a key would replay each other's stored result.
-- Deduplicate `refund` events the same way, under the `refund:` namespace.
+- Never accept refund ids or a `periodKey` from the end user: a public refund
+  endpoint lets a caller fabricate cancellations and clear their own quota.
 
 ## Multiple mounts
 

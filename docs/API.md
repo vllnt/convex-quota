@@ -69,6 +69,11 @@ return result;
 ```
 
 - Use a per-caller `scope` so one caller's `requestId` cannot replay another's.
+- Refunds are privileged; trigger them only from verified host events. Expose
+  the refund as an `internalMutation` fed from the host's own record of the play
+  (`subjectRef`, `requestId`, `periodKey`), deduplicated under a
+  `refund:${requestId}` key. A public refund endpoint lets callers fabricate
+  cancellations. See the README for the full recipe.
 - Namespace the key per operation (`consume:${requestId}`,
   `refund:${requestId}`): the ledger is keyed by scope and key only, so a shared
   key would replay another operation's stored result.
