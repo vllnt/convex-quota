@@ -34,11 +34,11 @@ amount defaults to 1.
 
 ## Docs
 
-- [README](README.md): Setup, behavior, security, multi-mount and limitations
-- [API Reference](docs/API.md): Exact signatures, results and error semantics
-- [Changelog](CHANGELOG.md): Release notes
-- [Contributing](CONTRIBUTING.md): Development workflow
-- [Example wrapper](example/convex/example.ts): Unauthenticated test fixtures, not production endpoints
-- [Tests](example/convex/example.test.ts): convex-test mock integration tests, not real OCC proof
-- [Security Policy](SECURITY.md): Reporting
-- [License](LICENSE): MIT
+- [README](https://github.com/vllnt/convex-quota/blob/main/README.md): Setup, behavior, security, multi-mount and limitations
+- [API Reference](https://github.com/vllnt/convex-quota/blob/main/docs/API.md): Exact signatures, results and error semantics
+- [Changelog](https://github.com/vllnt/convex-quota/blob/main/CHANGELOG.md): Release notes
+- [Contributing](https://github.com/vllnt/convex-quota/blob/main/CONTRIBUTING.md): Development workflow
+- [Example wrapper](https://github.com/vllnt/convex-quota/blob/main/example/convex/example.ts): Unauthenticated test fixtures, not production endpoints
+- [Tests](https://github.com/vllnt/convex-quota/blob/main/example/convex/example.test.ts): convex-test mock integration tests, not real OCC proof
+- [Security Policy](https://github.com/vllnt/convex-quota/blob/main/SECURITY.md): Reporting
+- [License](https://github.com/vllnt/convex-quota/blob/main/LICENSE): MIT
