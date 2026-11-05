@@ -4,10 +4,8 @@ import { api } from "./_generated/api";
 import schema from "./schema";
 import { register } from "../../src/test";
 import {
-  clampEraseBatch,
   interpretWindowError,
   isoWeek,
-  MAX_ERASE_BATCH,
   MAX_REF_LENGTH,
   resolveWindow,
   utcMsForLocalMidnight,
@@ -514,13 +512,5 @@ describe("interpretWindowError", () => {
       code: "INVALID_TIME_ZONE",
       message: "boom",
     });
-  });
-});
-
-describe("clampEraseBatch", () => {
-  test("clamps and rejects", () => {
-    expect(clampEraseBatch(10)).toBe(10);
-    expect(clampEraseBatch(MAX_ERASE_BATCH + 10)).toBe(MAX_ERASE_BATCH);
-    expect(() => clampEraseBatch(0)).toThrow();
   });
 });

@@ -42,8 +42,45 @@ rows.
 `{ allowed: boolean, remaining: number, used: number, limit: number, periodKey: string, resetsAt: number }`.
 Denied calls do not write. A lower limit can return `used > limit` with zero
 remaining. Successful calls store the latest limit for refund calculations. Not
-idempotent: deduplicate host event retries in the same transaction (e.g. with
-`@vllnt/convex-idempotency`).
+idempotent: pair it with `@vllnt/convex-idempotency` in the same host mutation
+(see below).
+
+#### Making `consume` retry-safe
+
+Claim the request, consume, then complete the claim, all in one host mutation.
+The three steps commit or roll back together: a failed attempt leaves no claim
+and no usage, and a duplicate request returns the stored result without
+consuming. The tested host mutation is `play` in
+[`example/convex/example.ts`](https://github.com/vllnt/convex-quota/blob/main/example/convex/example.ts),
+and the README section "Retries and idempotency" shows it in full.
+
+```ts
+const key = `consume:${requestId}`; // namespaced per operation
+const claim = await consumeIdempotency.begin(ctx, key, { scope });
+if (claim.state === "done" && claim.result !== undefined) return claim.result;
+if (claim.state !== "fresh") throw new Error("Retry shortly");
+const result = await quota.consume(ctx, subjectRef, "plays", 5, daily);
+const done = await consumeIdempotency.complete(ctx, key, result, {
+  scope,
+  claimId: claim.claimId,
+});
+if (!done.recorded) throw new Error(`Claim lost: ${done.reason}`);
+return result;
+```
+
+- Use a per-caller `scope` so one caller's `requestId` cannot replay another's.
+- Refunds are privileged; trigger them only from verified host events. Expose
+  the refund as an `internalMutation` fed from the host's own record of the play
+  (`subjectRef`, `requestId`, `periodKey`), deduplicated under a
+  `refund:${requestId}` key. A public refund endpoint lets callers fabricate
+  cancellations. See the README for the full recipe.
+- Namespace the key per operation (`consume:${requestId}`,
+  `refund:${requestId}`): the ledger is keyed by scope and key only, so a shared
+  key would replay another operation's stored result.
+- A denied consume is recorded and replayed as a denial.
+- The claim expires with the idempotency done-grace TTL (24 hours by default); a
+  retry after that consumes again.
+- Do no external work between `begin` and `complete`.
 
 ### `refund(ctx, subjectRef, key, amount, periodKey, scope?)`
 

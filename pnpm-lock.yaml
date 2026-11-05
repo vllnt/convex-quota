@@ -21,6 +21,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^5.0.5
         version: 5.0.5(vitest@5.0.5)
+      '@vllnt/convex-idempotency':
+        specifier: ^0.1.0
+        version: 0.1.0(convex@1.48.0)
       '@vllnt/eslint-config':
         specifier: 2.0.0
         version: 2.0.0(@typescript-eslint/parser@8.69.0(@typescript/typescript6@6.0.2)(eslint@9.39.5))(@typescript/typescript6@6.0.2)(convex@1.48.0)(eslint@9.39.5)(prettier@3.9.10)(turbo@2.9.18)
@@ -31,8 +34,8 @@ importers:
         specifier: ^1.48.0
         version: 1.48.0
       convex-test:
-        specifier: ^0.0.65
-        version: 0.0.65(convex@1.48.0)
+        specifier: ^0.0.66
+        version: 0.0.66(convex@1.48.0)
       eslint:
         specifier: ^9.39.5
         version: 9.39.5
@@ -789,6 +792,12 @@ packages:
   '@vitest/spy@5.0.5':
     resolution: {integrity: sha512-lwJRExuH417257Q5wv9QYugN9IMJkoxcrKrYxGPQkBzl7wlNpTUxD/5yNX4ESKVUIShKPgkGchYPFMWOOk0wzw==}
 
+  '@vllnt/convex-idempotency@0.1.0':
+    resolution: {integrity: sha512-7zK1/dRDoS4fjToflpllzKZLHx3DD6CVx1tM69nrFTKt2Sd5+fPrzyPZrVE7cHbLtViN7TTEvtO8h0z6SKkSBw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      convex: ^1.45.0
+
   '@vllnt/eslint-config@2.0.0':
     resolution: {integrity: sha512-AW0sYvGPAqA0lvnGSd8jwZMlbYL6cqTGmIcXkHWsGHuroAiubAqnpQ/7HwK2JD8YVlWjPTbVZp5bzMyeU+hbjw==}
     engines: {node: '>=20'}
@@ -974,8 +983,8 @@ packages:
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
 
-  convex-test@0.0.65:
-    resolution: {integrity: sha512-2FgHlLGraM2O3tEVpOfvoHSleK0x92J8xjQ/qClWzNJX3NcmgvuNeWBrmma7sLJ8lB3ENPxx6ykJTfvZmWg3BQ==}
+  convex-test@0.0.66:
+    resolution: {integrity: sha512-d70YxtlUqL6w37EmcxAYSQPRZ6lWF7PQ4q/KrbUrn6bfbxPG4eafLl5386UNrjCb8U1kX7mRCanrB4Bv8uB5Cg==}
     peerDependencies:
       convex: ^1.43.0
 
@@ -2963,6 +2972,10 @@ snapshots:
 
   '@vitest/spy@5.0.5': {}
 
+  '@vllnt/convex-idempotency@0.1.0(convex@1.48.0)':
+    dependencies:
+      convex: 1.48.0
+
   '@vllnt/eslint-config@2.0.0(@typescript-eslint/parser@8.69.0(@typescript/typescript6@6.0.2)(eslint@9.39.5))(@typescript/typescript6@6.0.2)(convex@1.48.0)(eslint@9.39.5)(prettier@3.9.10)(turbo@2.9.18)':
     dependencies:
       '@convex-dev/eslint-plugin': 4.0.0(@typescript/typescript6@6.0.2)(convex@1.48.0)(eslint@9.39.5)
@@ -3176,7 +3189,7 @@ snapshots:
 
   convert-source-map@2.0.0: {}
 
-  convex-test@0.0.65(convex@1.48.0):
+  convex-test@0.0.66(convex@1.48.0):
     dependencies:
       convex: 1.48.0
 
