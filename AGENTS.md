@@ -45,3 +45,5 @@ src/
 - 100% test coverage is BLOCKING.
 - Runtime deps: only official `@convex-dev/*` + `@vllnt/*`.
 - Type-A generated code: `**/_generated/**` is Convex CLI-owned; run `pnpm codegen`.
+- Host idempotency keys must be operation-prefixed (`consume:<id>`, `refund:<id>`) so consume and refund keys never collide; pair `quota.consume` with `@vllnt/convex-idempotency`.
+- Refunds only from host-owned, verified records, never from client-asserted amounts.
