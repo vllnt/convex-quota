@@ -315,10 +315,3 @@ export function interpretWindowError(error: unknown): {
     message: message.replace(/^INVALID_TIME_ZONE:\s*/, ""),
   };
 }
-
-export function clampEraseBatch(batch: number): number {
-  if (!Number.isInteger(batch) || batch < 1) {
-    throw new Error("INVALID_BATCH: batch must be a positive integer");
-  }
-  return Math.min(batch, MAX_ERASE_BATCH);
-}

@@ -99,7 +99,6 @@ export class Quota {
     return scope ?? this.defaultScope;
   }
 
-  // eslint-disable-next-line max-params -- Preserve the published positional client contract.
   consume(
     ctx: RunMutationCtx,
     subjectRef: string,
@@ -118,7 +117,6 @@ export class Quota {
     });
   }
 
-  // eslint-disable-next-line max-params -- Preserve the published positional client contract.
   remaining(
     ctx: RunQueryCtx,
     subjectRef: string,
@@ -136,7 +134,6 @@ export class Quota {
     });
   }
 
-  // eslint-disable-next-line max-params -- Preserve the published positional client contract.
   refund(
     ctx: RunMutationCtx,
     subjectRef: string,
@@ -154,7 +151,6 @@ export class Quota {
     });
   }
 
-  // eslint-disable-next-line max-params -- Preserve the published positional client contract.
   eraseSubject(
     ctx: RunMutationCtx,
     subjectRef: string,

@@ -19,6 +19,8 @@ export default [
       "convex-rules/no-filter-on-query": "error",
     },
   },
+  // The positional client methods match the sibling stables (e.g. convex-wallet).
+  { files: ["src/client/index.ts"], rules: { "max-params": "off" } },
   // The integration fixture deliberately exposes both query and mutation wrappers.
   {
     files: ["example/convex/example.ts"],
