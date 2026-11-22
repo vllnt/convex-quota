@@ -483,6 +483,18 @@ describe("window math", () => {
     expect(sun.periodKey).not.toBe(mon.periodKey);
   });
 
+  test("Monday-start week from a Wednesday uses that week's ISO week", () => {
+    const wednesday = Date.UTC(2026, 5, 17, 12, 0, 0);
+    const midweek = resolveWindow(wednesday, {
+      kind: "calendar",
+      period: "week",
+      timeZone: "UTC",
+    });
+    expect(midweek.periodKey).toBe("2026-W25");
+    expect(midweek.startAt).toBe(Date.UTC(2026, 5, 15));
+    expect(midweek.endAt).toBe(Date.UTC(2026, 5, 22));
+  });
+
   test("calendar month rolls in December", () => {
     const r = resolveWindow(Date.UTC(2026, 11, 31, 12, 0, 0), {
       kind: "calendar",
