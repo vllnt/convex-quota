@@ -1,13 +1,23 @@
 import { ConvexError, v } from "convex/values";
 
-import { MAX_REF_LENGTH } from "../shared.js";
+import {
+  interpretWindowError,
+  MAX_REF_LENGTH,
+  type ResolvedWindow,
+  resolveWindow,
+  type WindowSpec,
+} from "../shared.js";
+
+export function fail(code: string, message: string): never {
+  throw new ConvexError({ code, message });
+}
 
 export function requireRef(value: string, name: string): void {
   if (value.length === 0 || value.length > MAX_REF_LENGTH) {
-    throw new ConvexError({
-      code: "INVALID_REF",
-      message: `${name} must be 1..${MAX_REF_LENGTH.toString()} UTF-16 code units`,
-    });
+    fail(
+      "INVALID_REF",
+      `${name} must be 1..${MAX_REF_LENGTH.toString()} UTF-16 code units`,
+    );
   }
 }
 
@@ -17,10 +27,20 @@ export function requirePositiveInt(
   code: string,
 ): void {
   if (!Number.isSafeInteger(value) || value < 1) {
-    throw new ConvexError({
-      code,
-      message: `${name} must be a positive safe integer`,
-    });
+    fail(code, `${name} must be a positive safe integer`);
+  }
+}
+
+/** Resolve the current window at server time, mapping failures to ConvexError. */
+export function currentWindow(
+  spec: WindowSpec,
+  rollingStartAt: number | undefined,
+): ResolvedWindow {
+  try {
+    return resolveWindow(Date.now(), spec, rollingStartAt);
+  } catch (error) {
+    const parsed = interpretWindowError(error);
+    return fail(parsed.code, parsed.message);
   }
 }
 

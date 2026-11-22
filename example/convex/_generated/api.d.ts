@@ -49,4 +49,5 @@ export declare const internal: FilterApi<
 export declare const components: {
   quota: import("../../../src/component/_generated/component.js").ComponentApi<"quota">;
   secondary: import("../../../src/component/_generated/component.js").ComponentApi<"secondary">;
+  idempotency: import("@vllnt/convex-idempotency/_generated/component.js").ComponentApi<"idempotency">;
 };

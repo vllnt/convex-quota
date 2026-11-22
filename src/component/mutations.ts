@@ -1,11 +1,9 @@
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 
 import {
   DEFAULT_ERASE_BATCH,
-  interpretWindowError,
   MAX_ERASE_BATCH,
   type ResolvedWindow,
-  resolveWindow,
   windowPolicyKey,
   type WindowSpec,
 } from "../shared.js";
@@ -15,27 +13,13 @@ import type { Doc as Document_ } from "./_generated/dataModel.js";
 import { mutation, type MutationCtx } from "./_generated/server.js";
 import {
   consumeResult,
+  currentWindow,
+  fail,
   requireAllowanceInput,
   requirePositiveInt,
   requireRef,
   windowSpec,
 } from "./validators.js";
-
-function fail(code: string, message: string): never {
-  throw new ConvexError({ code, message });
-}
-
-function currentWindow(
-  spec: WindowSpec,
-  rollingStartAt: number | undefined,
-): ResolvedWindow {
-  try {
-    return resolveWindow(Date.now(), spec, rollingStartAt);
-  } catch (error) {
-    const parsed = interpretWindowError(error);
-    fail(parsed.code, parsed.message);
-  }
-}
 
 async function loadAllowance(
   ctx: MutationCtx,
@@ -192,10 +176,7 @@ export const eraseSubject = mutation({
     requireRef(arguments_.subjectRef, "subjectRef");
     requireRef(arguments_.scope, "scope");
     const raw = arguments_.batch ?? DEFAULT_ERASE_BATCH;
-    if (!Number.isInteger(raw)) {
-      fail("INVALID_BATCH", "batch must be a positive integer");
-    }
-    if (raw < 1) {
+    if (!Number.isInteger(raw) || raw < 1) {
       fail("INVALID_BATCH", "batch must be a positive integer");
     }
     const batch = Math.min(raw, MAX_ERASE_BATCH);
