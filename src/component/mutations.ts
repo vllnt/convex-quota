@@ -77,6 +77,14 @@ async function saveAllowance(
     : ctx.db.patch("allowances", existing._id, row));
 }
 
+async function saveUsed(
+  ctx: MutationCtx,
+  id: Document_<"allowances">["_id"],
+  used: number,
+) {
+  await ctx.db.patch("allowances", id, { updatedAt: Date.now(), used });
+}
+
 export const consume = mutation({
   args: {
     amount: v.number(),
@@ -149,10 +157,7 @@ export const refund = mutation({
     }
 
     const used = Math.max(existing.used - arguments_.amount, 0);
-    await ctx.db.patch("allowances", existing._id, {
-      updatedAt: Date.now(),
-      used,
-    });
+    if (used !== existing.used) await saveUsed(ctx, existing._id, used);
     return {
       refunded: true,
       remaining: Math.max(existing.limit - used, 0),
