@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `refund` skips the write when the allowance's `used` would not change (already zero), so a
+  no-op refund no longer re-runs `remaining` subscribers.
+
 ## [0.1.0] - 2026-11-23
 
 First stable release.
