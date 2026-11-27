@@ -86,7 +86,7 @@
       "handlebars@<4.7.10": "^4.7.10"
     }
   },
-  "homepage": "https://github.com/vllnt/convex-quota#readme",
+  "homepage": "https://oss.vllnt.com/packages/convex-quota",
   "bugs": {
     "url": "https://github.com/vllnt/convex-quota/issues"
   },

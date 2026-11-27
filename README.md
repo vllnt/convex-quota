@@ -16,12 +16,8 @@ Daily/weekly play caps, free-tier slots, Codex-style limits.
 
 Use it for allowances that reset on a schedule and that your UI needs to read:
 "3 plays left today", a weekly cap in the subject's own timezone, free-tier
-slots, a refund when an action is cancelled.
-
-- General throttling (token buckets, fixed windows, React hooks): use the
-  official `@convex-dev/rate-limiter`.
-- Billable usage records: use `@vllnt/convex-metering`.
-- Balances that persist and are spent down: use `@vllnt/convex-wallet`.
+slots, a refund when an action is cancelled. For other needs, see
+[Related packages](#related-packages).
 
 ```ts
 const quota = new Quota(components.quota);
@@ -46,6 +42,13 @@ if (!r.allowed) throw new Error(`try again at ${r.resetsAt}`);
 - **Bounded erase** — `eraseSubject` deletes in batches and reschedules until
   clean.
 - **Scopes** — default `"global"`, or namespace per tenant / product.
+
+## For coding agents
+
+The docs are bundled in the npm package at
+`node_modules/@vllnt/convex-quota/docs/` (with `README.md`, `CHANGELOG.md`,
+`llms.txt` and the TypeScript sources in `src/`) and match the installed
+version. Read them before writing code.
 
 ## Installation
 
@@ -362,6 +365,16 @@ const t = convexTest(schema, import.meta.glob("./**/*.ts"));
 register(t);
 ```
 
+## Related packages
+
+| Package                     | Use it when                                                                                                    |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `@convex-dev/rate-limiter`  | You need general throttling (token buckets, fixed windows, React hooks), not a readable allowance.             |
+| `@vllnt/convex-idempotency` | Retries must not double-count `consume` or `refund` (see [Retries and idempotency](#retries-and-idempotency)). |
+| `@vllnt/convex-metering`    | You need billable usage records rolled up per billing period.                                                  |
+| `@vllnt/convex-wallet`      | You need a balance that persists and is spent down, not reset on a schedule.                                   |
+| `@vllnt/convex-api-keys`    | You issue API keys; pass a validated key's ID as `subjectRef` to cap that key's usage per window.              |
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -371,11 +384,12 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 Built by [bntvllnt](https://github.com/bntvllnt) ·
 [bntvllnt.com](https://bntvllnt.com) · [X @bntvllnt](https://x.com/bntvllnt)
 
-Part of the [@vllnt](https://github.com/vllnt) Convex component fleet —
-[vllnt.com](https://vllnt.com)
-
 If this is useful, [sponsor the work](https://github.com/sponsors/bntvllnt).
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+Part of vllnt oss: https://oss.vllnt.com

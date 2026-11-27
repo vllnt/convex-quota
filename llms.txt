@@ -32,13 +32,27 @@ to the `latest` dist-tag with npm provenance, unreleased builds from main go to
 `canary`. The sole client option is `defaultScope` (default `"global"`); consume
 amount defaults to 1.
 
+## For coding agents
+
+The docs below are bundled in the npm package at
+`node_modules/@vllnt/convex-quota/` (`docs/API.md`, `README.md`,
+`CHANGELOG.md`, `llms.txt`) and match the installed version. The TypeScript
+sources ship in `src/`. Read them before writing code.
+
 ## Docs
 
-- [README](https://github.com/vllnt/convex-quota/blob/main/README.md): Setup, behavior, security, multi-mount and limitations
-- [API Reference](https://github.com/vllnt/convex-quota/blob/main/docs/API.md): Exact signatures, results and error semantics
-- [Changelog](https://github.com/vllnt/convex-quota/blob/main/CHANGELOG.md): Release notes
+- [README](./README.md): Setup, behavior, security, multi-mount and limitations
+- [API Reference](./docs/API.md): Exact signatures, results and error semantics
+- [Changelog](./CHANGELOG.md): Release notes
+- [License](./LICENSE): MIT
+
+## Repository (not in the npm package)
+
 - [Contributing](https://github.com/vllnt/convex-quota/blob/main/CONTRIBUTING.md): Development workflow
 - [Example wrapper](https://github.com/vllnt/convex-quota/blob/main/example/convex/example.ts): Unauthenticated test fixtures, not production endpoints
 - [Tests](https://github.com/vllnt/convex-quota/blob/main/example/convex/example.test.ts): convex-test mock integration tests, not real OCC proof
 - [Security Policy](https://github.com/vllnt/convex-quota/blob/main/SECURITY.md): Reporting
-- [License](https://github.com/vllnt/convex-quota/blob/main/LICENSE): MIT
+
+## Ecosystem
+
+- [vllnt oss](https://oss.vllnt.com/llms.txt): Index of vllnt open-source packages

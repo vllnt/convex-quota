@@ -6,10 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- The npm package's `llms.txt` and README tell coding agents that the docs are
+  bundled at `node_modules/@vllnt/convex-quota/docs/` and match the installed
+  version. `llms.txt` links shipped files with relative paths and adds an
+  Ecosystem link; the README adds Related packages. `docs/API.md` lists the
+  package entry points and exported types.
+- `pnpm check:pack` fails when a required file is missing from the tarball or a
+  relative `llms.txt` link does not resolve inside it.
+
 ### Changed
 
-- `refund` skips the write when the allowance's `used` would not change (already zero), so a
-  no-op refund no longer re-runs `remaining` subscribers.
+- `homepage` points to https://oss.vllnt.com/packages/convex-quota.
+- Every push to `main` that touches the package or its shipped docs publishes a
+  `canary`, with no repository-variable gate.
+- `refund` skips the write when the allowance's `used` would not change (already
+  zero), so a no-op refund no longer re-runs `remaining` subscribers.
 
 ## [0.1.0] - 2026-11-23
 

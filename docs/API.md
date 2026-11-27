@@ -14,6 +14,15 @@ at most 256 UTF-16 code units (`INVALID_REF`). Amounts and limits must be
 positive safe integers (`INVALID_AMOUNT`, `INVALID_LIMIT`). Scope defaults to
 `"global"`. All component errors use `ConvexError({ code, message })`.
 
+## Entry points
+
+| Import                                        | Exports                                                                                                                                  |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `@vllnt/convex-quota`                         | `Quota` class; types `QuotaComponent`, `QuotaOptions`, `ConsumeOptions`, `ConsumeResult`, `RemainingState`, `RefundResult`, `WindowSpec` |
+| `@vllnt/convex-quota/convex.config`           | the component definition, for `app.use(quota)`                                                                                           |
+| `@vllnt/convex-quota/test`                    | `register(t, name = "quota")` for `convex-test` (needs `convex-test` and Vite's `import.meta.glob`)                                      |
+| `@vllnt/convex-quota/_generated/component.js` | type `ComponentApi`                                                                                                                      |
+
 ## Windows
 
 - `{ kind: "calendar", period: "day" | "week" | "month", timeZone: string, weekStartsOn?: "monday" | "sunday" }`
