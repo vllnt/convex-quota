@@ -23,6 +23,10 @@ positive safe integers (`INVALID_AMOUNT`, `INVALID_LIMIT`). Scope defaults to
 | `@vllnt/convex-quota/test`                    | `register(t, name = "quota")` for `convex-test` (needs `convex-test` and Vite's `import.meta.glob`)                                      |
 | `@vllnt/convex-quota/_generated/component.js` | type `ComponentApi`                                                                                                                      |
 
+`./convex.config.js` and `./_generated/component` are aliases of the
+`./convex.config` and `./_generated/component.js` entries; `./package.json` is
+also exported.
+
 ## Windows
 
 - `{ kind: "calendar", period: "day" | "week" | "month", timeZone: string, weekStartsOn?: "monday" | "sunday" }`

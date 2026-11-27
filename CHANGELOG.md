@@ -9,7 +9,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - The npm package's `llms.txt` and README tell coding agents that the docs are
-  bundled at `node_modules/@vllnt/convex-quota/docs/` and match the installed
+  bundled at `node_modules/@vllnt/convex-quota/docs/` (with `README.md`,
+  `CHANGELOG.md` and `llms.txt` in the package root) and match the installed
   version. `llms.txt` links shipped files with relative paths and adds an
   Ecosystem link; the README adds Related packages. `docs/API.md` lists the
   package entry points and exported types.

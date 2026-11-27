@@ -34,10 +34,10 @@ amount defaults to 1.
 
 ## For coding agents
 
-The docs below are bundled in the npm package at
-`node_modules/@vllnt/convex-quota/` (`docs/API.md`, `README.md`,
-`CHANGELOG.md`, `llms.txt`) and match the installed version. The TypeScript
-sources ship in `src/`. Read them before writing code.
+The docs are bundled in the npm package at
+`node_modules/@vllnt/convex-quota/docs/`, with `README.md`, `CHANGELOG.md` and
+`llms.txt` in the package root and the TypeScript sources in `src/`. They match
+the installed version. Read them before writing code.
 
 ## Docs
 

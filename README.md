@@ -35,7 +35,7 @@ if (!r.allowed) throw new Error(`try again at ${r.resetsAt}`);
   `{ used, remaining, limit, periodKey, resetsAt }`; only `consume` includes
   `allowed`.
 - **Window kinds** — calendar (`day` / `week` / `month` + IANA timezone),
-  rolling (from first consume), epoch (`floor(now / durationMs)`).
+  rolling (from first allowed consume), epoch (`floor(now / durationMs)`).
 - **Server-sourced time** — window math uses `Date.now()` inside the component.
 - **Opaque refs** — `subjectRef`, `key`, and `scope` are host strings (1..256
   UTF-16 code units).
@@ -46,9 +46,9 @@ if (!r.allowed) throw new Error(`try again at ${r.resetsAt}`);
 ## For coding agents
 
 The docs are bundled in the npm package at
-`node_modules/@vllnt/convex-quota/docs/` (with `README.md`, `CHANGELOG.md`,
-`llms.txt` and the TypeScript sources in `src/`) and match the installed
-version. Read them before writing code.
+`node_modules/@vllnt/convex-quota/docs/`, with `README.md`, `CHANGELOG.md` and
+`llms.txt` in the package root and the TypeScript sources in `src/`. They match
+the installed version. Read them before writing code.
 
 ## Installation
 
@@ -283,8 +283,8 @@ export const refundPlay = internalMutation({
 ```
 
 This exact pattern is exercised in
-[`example/convex/idempotency.test.ts`](example/convex/idempotency.test.ts): a
-duplicate `requestId` replays the stored result and consumes once, a new
+[`example/convex/idempotency.test.ts`](https://github.com/vllnt/convex-quota/blob/main/example/convex/idempotency.test.ts):
+a duplicate `requestId` replays the stored result and consumes once, a new
 `requestId` consumes again, the caller `scope` isolates identical request ids, a
 host failure after `consume` rolls back both the allowance and the claim, and a
 refund event deduplicated by `requestId` refunds once.
@@ -377,7 +377,8 @@ register(t);
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See
+[CONTRIBUTING.md](https://github.com/vllnt/convex-quota/blob/main/CONTRIBUTING.md).
 
 ## Author
 

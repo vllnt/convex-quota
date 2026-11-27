@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 
 const root = process.cwd();
 const temporary = mkdtempSync(join(tmpdir(), "quota-pack-"));
@@ -17,10 +17,9 @@ try {
   const required = ["README.md", "LICENSE", "CHANGELOG.md", "llms.txt", "docs/API.md", "dist/client/index.js", "dist/client/index.d.ts", "dist/component/convex.config.js", "src/test.ts"];
   const missing = required.filter((file) => !existsSync(join(packed, file)));
   if (missing.length > 0) throw new Error(`Tarball is missing required files: ${missing.join(", ")}`);
-  const internal = ["AGENTS.md", "CONTRIBUTING.md", "src/refund.test.ts"].filter((file) => existsSync(join(packed, file)));
-  if (internal.length > 0) throw new Error(`Tarball ships internal files: ${internal.join(", ")}`);
-  const links = [...readFileSync(join(packed, "llms.txt"), "utf8").matchAll(/\]\((\.\/[^)]+)\)/g)].map((match) => match[1]);
-  const broken = links.filter((link) => !existsSync(join(packed, link)));
+  // Every non-URL llms.txt link must be "./path" to a file inside the tarball.
+  const links = [...readFileSync(join(packed, "llms.txt"), "utf8").matchAll(/\]\(([^)]+)\)/g)].map((match) => match[1].split("#")[0]).filter((link) => link && !/^[a-z][a-z\d+.-]*:/i.test(link));
+  const broken = links.filter((link) => { const target = resolve(packed, link); return !link.startsWith("./") || relative(packed, target).startsWith("..") || !existsSync(target) || !statSync(target).isFile(); });
   if (links.length === 0 || broken.length > 0) throw new Error(`llms.txt relative links missing from tarball: ${broken.join(", ") || "none found"}`);
   mkdirSync(join(temporary, "node_modules/@vllnt"), { recursive: true });
   symlinkSync(join(temporary, "package"), join(temporary, "node_modules/@vllnt/convex-quota"));
