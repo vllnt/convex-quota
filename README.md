@@ -16,12 +16,8 @@ Daily/weekly play caps, free-tier slots, Codex-style limits.
 
 Use it for allowances that reset on a schedule and that your UI needs to read:
 "3 plays left today", a weekly cap in the subject's own timezone, free-tier
-slots, a refund when an action is cancelled.
-
-- General throttling (token buckets, fixed windows, React hooks): use the
-  official `@convex-dev/rate-limiter`.
-- Billable usage records: use `@vllnt/convex-metering`.
-- Balances that persist and are spent down: use `@vllnt/convex-wallet`.
+slots, a refund when an action is cancelled. For other needs, see
+[Related packages](#related-packages).
 
 ```ts
 const quota = new Quota(components.quota);
@@ -39,13 +35,20 @@ if (!r.allowed) throw new Error(`try again at ${r.resetsAt}`);
   `{ used, remaining, limit, periodKey, resetsAt }`; only `consume` includes
   `allowed`.
 - **Window kinds** — calendar (`day` / `week` / `month` + IANA timezone),
-  rolling (from first consume), epoch (`floor(now / durationMs)`).
+  rolling (from first allowed consume), epoch (`floor(now / durationMs)`).
 - **Server-sourced time** — window math uses `Date.now()` inside the component.
 - **Opaque refs** — `subjectRef`, `key`, and `scope` are host strings (1..256
   UTF-16 code units).
 - **Bounded erase** — `eraseSubject` deletes in batches and reschedules until
   clean.
 - **Scopes** — default `"global"`, or namespace per tenant / product.
+
+## For coding agents
+
+The docs are bundled in the npm package at
+`node_modules/@vllnt/convex-quota/docs/`, with `README.md`, `CHANGELOG.md` and
+`llms.txt` in the package root and the TypeScript sources in `src/`. They match
+the installed version. Read them before writing code.
 
 ## Installation
 
@@ -280,8 +283,8 @@ export const refundPlay = internalMutation({
 ```
 
 This exact pattern is exercised in
-[`example/convex/idempotency.test.ts`](example/convex/idempotency.test.ts): a
-duplicate `requestId` replays the stored result and consumes once, a new
+[`example/convex/idempotency.test.ts`](https://github.com/vllnt/convex-quota/blob/main/example/convex/idempotency.test.ts):
+a duplicate `requestId` replays the stored result and consumes once, a new
 `requestId` consumes again, the caller `scope` isolates identical request ids, a
 host failure after `consume` rolls back both the allowance and the claim, and a
 refund event deduplicated by `requestId` refunds once.
@@ -362,20 +365,32 @@ const t = convexTest(schema, import.meta.glob("./**/*.ts"));
 register(t);
 ```
 
+## Related packages
+
+| Package                     | Use it when                                                                                                    |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `@convex-dev/rate-limiter`  | You need general throttling (token buckets, fixed windows, React hooks), not a readable allowance.             |
+| `@vllnt/convex-idempotency` | Retries must not double-count `consume` or `refund` (see [Retries and idempotency](#retries-and-idempotency)). |
+| `@vllnt/convex-metering`    | You need billable usage records rolled up per billing period.                                                  |
+| `@vllnt/convex-wallet`      | You need a balance that persists and is spent down, not reset on a schedule.                                   |
+| `@vllnt/convex-api-keys`    | You issue API keys; pass a validated key's ID as `subjectRef` to cap that key's usage per window.              |
+
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+See
+[CONTRIBUTING.md](https://github.com/vllnt/convex-quota/blob/main/CONTRIBUTING.md).
 
 ## Author
 
 Built by [bntvllnt](https://github.com/bntvllnt) ·
 [bntvllnt.com](https://bntvllnt.com) · [X @bntvllnt](https://x.com/bntvllnt)
 
-Part of the [@vllnt](https://github.com/vllnt) Convex component fleet —
-[vllnt.com](https://vllnt.com)
-
 If this is useful, [sponsor the work](https://github.com/sponsors/bntvllnt).
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+Part of vllnt oss: https://oss.vllnt.com
