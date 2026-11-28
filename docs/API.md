@@ -79,6 +79,7 @@ Throws `INVALID_REF`, `INVALID_LIMIT`, `INVALID_AMOUNT`, `INVALID_DURATION`,
 type ConsumeOptions = {
   /** Units to consume. Default `1`. */
   amount?: number;
+  /** Namespace for this call. Default: the client's `defaultScope`. */
   scope?: string;
 };
 ```
@@ -195,7 +196,7 @@ type WindowSpec =
 
 - `calendar`: the local day, week or month in `timeZone`, an IANA name
   validated by `Intl.DateTimeFormat` (`INVALID_TIME_ZONE`). Weeks start on
-  Monday unless `weekStartsOn: "sunday"`. Days can last 23 or 25 hours. A
+  Monday unless `weekStartsOn: "sunday"`. Days are not always 24 hours (for example 23 or 25 on a DST change). A
   repeated local midnight uses the earlier instant; a skipped midnight or date
   advances through the gap.
 - `rolling`: starts at the first allowed `consume` and lasts `durationMs`; the

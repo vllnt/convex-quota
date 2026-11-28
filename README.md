@@ -402,7 +402,8 @@ Invalid input throws a `ConvexError` whose `data` is `{ code, message }`:
   Convex query subscription, so treat `resetsAt` as an expiry hint; `consume`
   always rechecks server time.
 - Rolling windows start at the first allowed `consume`. Epoch windows are
-  `floor(now / durationMs)` buckets. Calendar days can last 23 or 25 hours; a
+  `floor(now / durationMs)` buckets. Calendar days are not always 24 hours (for
+  example 23 or 25 on a DST change); a
   repeated local midnight uses the earlier instant, and a skipped midnight or
   date advances through the gap.
 - `periodKey` is an opaque window label, not a receipt or idempotency token. Do

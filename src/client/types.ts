@@ -19,7 +19,11 @@ export type RemainingState = {
   used: number;
 };
 
-/** Result of `refund`: whether usage changed, and the stored row's state. */
+/**
+ * Result of `refund`: whether the refund applied (matching, unexpired
+ * `periodKey`; also `true` when `used` was already 0), and the stored row's
+ * `used` and `remaining`.
+ */
 export type RefundResult = {
   refunded: boolean;
   remaining: number;

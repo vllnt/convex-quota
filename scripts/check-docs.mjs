@@ -20,7 +20,8 @@ import { extractLinks } from "./markdown-links.mjs";
  * compiles them against the packed package).
  * Shipped docs: relative links and #anchors resolve to packed files and
  * headings, docs/API.md names every export and error code, llms.txt holds the
- * summary, facts and links and ends with the Ecosystem block, and the retired
+ * summary, a When to use section, the peer range, the coding-agent note and
+ * the docs links and ends with the Ecosystem block, and the retired
  * vllnt ".ai" domain appears nowhere.
  * Sources: every export and method has a TSDoc summary, and the main entry
  * carries the package-page `@see` line.

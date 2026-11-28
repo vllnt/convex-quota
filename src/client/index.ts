@@ -106,8 +106,9 @@ export class Quota {
   }
 
   /**
-   * Use `options.amount` (default 1) units of the current window if they fit
-   * under `limit`; a denied call writes nothing. Not idempotent.
+   * Use `options.amount` (default 1) units of the current window if
+   * `used + amount` stays within `limit`; a denied call writes nothing. Not
+   * idempotent.
    */
   consume(
     ctx: RunMutationCtx,
