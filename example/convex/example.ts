@@ -52,8 +52,8 @@ export const consume = mutation({
   returns: consumeResult,
   handler: (ctx, a) =>
     quota.consume(ctx, a.subjectRef, a.key, a.limit, a.window, {
-      amount: a.amount,
-      scope: a.scope,
+      ...(a.amount === undefined ? {} : { amount: a.amount }),
+      ...(a.scope === undefined ? {} : { scope: a.scope }),
     }),
 });
 

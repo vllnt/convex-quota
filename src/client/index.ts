@@ -158,7 +158,7 @@ export class Quota {
     batch?: number,
   ): Promise<number> {
     return ctx.runMutation(this.component.mutations.eraseSubject, {
-      batch,
+      ...(batch === undefined ? {} : { batch }),
       scope: this.scopeOf(scope),
       subjectRef,
     });
