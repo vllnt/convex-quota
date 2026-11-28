@@ -1,7 +1,7 @@
 {
   "name": "@vllnt/convex-quota",
   "version": "0.1.1",
-  "description": "Scheduled-reset per-subject allowances as a Convex component — calendar, rolling, or epoch windows with readable remaining",
+  "description": "TypeScript Convex component for quotas and allowances: daily, weekly, monthly, rolling or epoch reset windows per user or key, with a readable remaining count.",
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@10.34.9",
@@ -43,7 +43,7 @@
     "build:clean": "rm -rf dist *.tsbuildinfo && pnpm build:codegen",
     "typecheck": "tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsc/typecheck.tsbuildinfo",
     "typecheck:ci": "tsc --noEmit --incremental --tsBuildInfoFile node_modules/.cache/tsc/typecheck-ci.tsbuildinfo && tsc --noEmit --project tsconfig.test.json",
-    "lint": "pnpm check:agents && pnpm check:release && eslint --cache --cache-location node_modules/.cache/eslint/ . --max-warnings 0",
+    "lint": "pnpm check:agents && pnpm check:release && pnpm check:docs && eslint --cache --cache-location node_modules/.cache/eslint/ . --max-warnings 0",
     "test": "vitest run",
     "test:watch": "vitest --typecheck --clearScreen false",
     "test:coverage": "vitest run --coverage --coverage.reporter=text",
@@ -51,6 +51,7 @@
     "preversion": "pnpm install --frozen-lockfile && pnpm build && pnpm test:coverage && pnpm typecheck && pnpm generate:llms",
     "check:release": "node scripts/check-release.mjs",
     "check:pack": "node scripts/check-pack.mjs",
+    "check:docs": "node scripts/check-docs.mjs",
     "check:agents": "node -e \"const f=require('node:fs');if(!f.existsSync('AGENTS.md')||f.existsSync('CLAUDE.md')||f.existsSync('.claude'))process.exit(1)\"",
     "codegen": "pnpm convex codegen --component-dir ./src/component"
   },
@@ -112,8 +113,15 @@
   "keywords": [
     "convex",
     "convex-component",
+    "typescript",
     "quota",
-    "rate-limit",
-    "allowance"
+    "allowance",
+    "usage-limits",
+    "daily-limit",
+    "monthly-limit",
+    "reset-window",
+    "rolling-window",
+    "free-tier",
+    "timezone"
   ]
 }

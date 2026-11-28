@@ -18,10 +18,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   package entry points and exported types.
 - `pnpm check:pack` fails when a required file is missing from the tarball or a
   relative `llms.txt` link does not resolve inside it.
+- The README is rewritten for coding agents: install and a quick start first, an
+  API table linked to `docs/API.md`, common tasks, an errors-and-fixes table for
+  every `ConvexError` code, limits and gotchas, and compatibility. `docs/API.md`
+  documents every public export with its signature, defaults, result shape and
+  error codes; `llms.txt` carries the same summary and ends with an Ecosystem
+  block.
+- Every public export and `Quota` method has a TSDoc summary.
+- `pnpm lint` runs `pnpm check:docs`, and `pnpm check:pack` type-checks the
+  TypeScript examples in the README and `docs/API.md` against the packed
+  package.
 
 ### Changed
 
 - `homepage` points to https://oss.vllnt.com/packages/convex-quota.
+- The `package.json` description and keywords name the problem and the stack
+  (Convex, TypeScript, quota, allowance, reset windows).
 - Every push to `main` that touches the package or its shipped docs publishes a
   `canary`, with no repository-variable gate.
 - `refund` skips the write when the allowance's `used` would not change (already

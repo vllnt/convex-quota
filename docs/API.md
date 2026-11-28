@@ -1,149 +1,276 @@
-# API Reference — @vllnt/convex-quota
+# API reference: @vllnt/convex-quota
 
-**Compatibility:** `convex@^1.45.0`
-
-```ts
-import { Quota } from "@vllnt/convex-quota";
-const quota = new Quota(components.quota, { defaultScope: "global" });
-```
+Peer dependency: `convex@^1.45.0`. Quick start, common tasks and the errors
+table are in the [README](../README.md).
 
 The host owns authentication, authorization and policy. Never accept identity,
-limit, amount, scope or window policy directly from an untrusted caller.
-`subjectRef`, `key`, `scope`, and refund `periodKey` must be nonempty strings of
-at most 256 UTF-16 code units (`INVALID_REF`). Amounts and limits must be
-positive safe integers (`INVALID_AMOUNT`, `INVALID_LIMIT`). Scope defaults to
-`"global"`. All component errors use `ConvexError({ code, message })`.
+`limit`, `amount`, `scope` or window policy directly from an untrusted caller.
+Every component error is a `ConvexError` whose `data` is `{ code, message }`;
+see [Error codes](#error-codes).
 
 ## Entry points
 
 | Import                                        | Exports                                                                                                                                  |
 | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `@vllnt/convex-quota`                         | `Quota` class; types `QuotaComponent`, `QuotaOptions`, `ConsumeOptions`, `ConsumeResult`, `RemainingState`, `RefundResult`, `WindowSpec` |
-| `@vllnt/convex-quota/convex.config`           | the component definition, for `app.use(quota)`                                                                                           |
-| `@vllnt/convex-quota/test`                    | `register(t, name = "quota")` for `convex-test` (needs `convex-test` and Vite's `import.meta.glob`)                                      |
-| `@vllnt/convex-quota/_generated/component.js` | type `ComponentApi`                                                                                                                      |
+| `@vllnt/convex-quota`                         | class `Quota`; types `QuotaComponent`, `QuotaOptions`, `ConsumeOptions`, `ConsumeResult`, `RemainingState`, `RefundResult`, `WindowSpec` |
+| `@vllnt/convex-quota/convex.config`           | default export: the [component definition](#convexconfig), for `app.use(quota)`                                                          |
+| `@vllnt/convex-quota/test`                    | function [`register`](#register) for `convex-test`                                                                                       |
+| `@vllnt/convex-quota/_generated/component.js` | type [`ComponentApi`](#componentapi)                                                                                                     |
 
 `./convex.config.js` and `./_generated/component` are aliases of the
 `./convex.config` and `./_generated/component.js` entries; `./package.json` is
-also exported.
+also exported. The package is ESM only.
+
+## Client
+
+### `Quota`
+
+```ts
+// convex/quota.ts
+import { Quota } from "@vllnt/convex-quota";
+import { components } from "./_generated/api";
+
+export const quota = new Quota(components.quota, { defaultScope: "global" });
+```
+
+`new Quota(component: QuotaComponent, options?: QuotaOptions)`. Pass the
+generated `components.<mount name>` reference. All methods take the Convex
+`ctx` of the calling function: mutation methods need `ctx.runMutation`
+(a mutation or action), `remaining` needs `ctx.runQuery` (a query, mutation or
+action).
+
+Shared argument rules:
+
+- `subjectRef`, `key`, `scope` and the refund `periodKey` are opaque host
+  strings of 1 to 256 UTF-16 code units (`INVALID_REF`).
+- `limit` and `amount` are positive safe integers (`INVALID_LIMIT`,
+  `INVALID_AMOUNT`).
+- `scope` defaults to `QuotaOptions.defaultScope`, which defaults to
+  `"global"`. An allowance is identified by `(scope, subjectRef, key)`.
+- Time is always read on the server (`Date.now()` inside the component). No
+  method takes a caller's time.
+
+### `QuotaOptions`
+
+```ts
+type QuotaOptions = {
+  /** Namespace applied when a call omits `scope`. Default `"global"`. */
+  defaultScope?: string;
+};
+```
+
+### `consume`
+
+`consume(ctx, subjectRef: string, key: string, limit: number, window: WindowSpec, options?: ConsumeOptions): Promise<ConsumeResult>`
+
+Adds `amount` (default 1) to the current window's usage if `amount <= limit - used`;
+otherwise returns `allowed: false` and writes nothing. An allowed call stores the
+row (usage, the latest `limit`, the window and its policy). A denied call does
+not start a rolling window and does not store the new limit. Not idempotent: a
+retried call consumes again; pair it with `@vllnt/convex-idempotency` in the
+same host mutation (README, Common tasks).
+
+Throws `INVALID_REF`, `INVALID_LIMIT`, `INVALID_AMOUNT`, `INVALID_DURATION`,
+`INVALID_TIME_ZONE`, `POLICY_MISMATCH`.
+
+### `ConsumeOptions`
+
+```ts
+type ConsumeOptions = {
+  /** Units to consume. Default `1`. */
+  amount?: number;
+  /** Namespace for this call. Default: the client's `defaultScope`. */
+  scope?: string;
+};
+```
+
+### `ConsumeResult`
+
+```ts
+type ConsumeResult = {
+  allowed: boolean;
+  limit: number; // the limit passed to this call
+  periodKey: string; // opaque window label
+  remaining: number; // max(limit - used, 0)
+  resetsAt: number; // window end, Unix ms
+  used: number; // usage after this call
+};
+```
+
+A lower `limit` than the stored usage returns `used` above `limit` with
+`remaining: 0`.
+
+### `remaining`
+
+`remaining(ctx, subjectRef: string, key: string, limit: number, window: WindowSpec, scope?: string): Promise<RemainingState>`
+
+Computes the current window when the query runs and never writes. A row from an
+earlier window reads as zero usage. A query does not start a rolling window:
+with no stored row, a rolling window is reported as starting now. Time passing
+alone does not invalidate a Convex query subscription, so treat `resetsAt` as an
+expiry hint and use `consume` for the authoritative decision. No timer or reset
+scheduler is installed.
+
+Throws `INVALID_REF`, `INVALID_LIMIT`, `INVALID_DURATION`, `INVALID_TIME_ZONE`,
+`POLICY_MISMATCH`.
+
+### `RemainingState`
+
+```ts
+type RemainingState = {
+  limit: number;
+  periodKey: string;
+  remaining: number;
+  resetsAt: number;
+  used: number;
+};
+```
+
+### `refund`
+
+`refund(ctx, subjectRef: string, key: string, amount: number, periodKey: string, scope?: string): Promise<RefundResult>`
+
+Subtracts `amount` from usage, clamped at zero, only if the stored row's
+`periodKey` equals `periodKey` and its window has not ended. Otherwise returns
+`refunded: false` with the stored row's `used` and `remaining` (zeros if there
+is no row) and writes nothing; those numbers are not recomputed for the current
+window. `remaining` uses the limit stored by the last allowed `consume`. A
+matching row whose `used` is already 0 returns `refunded: true` without a write.
+`refund` does not check the window policy.
+
+Privileged and not idempotent: repeated refunds subtract repeatedly. Call it
+only from verified host records (for example an `internalMutation`), and
+deduplicate refund events in the host transaction. Erasing and recreating the
+same calendar period can reuse a `periodKey`, so old refunds must not be
+replayed against it.
+
+Throws `INVALID_REF`, `INVALID_AMOUNT`.
+
+### `RefundResult`
+
+```ts
+type RefundResult = {
+  refunded: boolean;
+  remaining: number;
+  used: number;
+};
+```
+
+### `eraseSubject`
+
+`eraseSubject(ctx, subjectRef: string, scope?: string, batch?: number): Promise<number>`
+
+Deletes up to `batch` of the subject's rows in `scope` and returns the number
+deleted in this first pass, not the total. `batch` defaults to 200; values above
+500 are capped to 500; a value that is not a positive integer throws
+`INVALID_BATCH`. When a pass deletes a full batch, the component schedules
+another pass immediately, which can end with an empty pass. Each pass is atomic;
+the whole sweep is not. Erasure is not a tombstone: stop new consumes for the
+subject until the scheduled passes finish, or a racing consume can survive or be
+deleted. Watch the Convex scheduler for failed passes.
+
+Throws `INVALID_REF`, `INVALID_BATCH`.
+
+### `QuotaComponent`
+
+The function references the client calls, matching `components.quota`:
+`mutations.consume`, `mutations.refund`, `mutations.eraseSubject` and
+`queries.remaining`, all `internal` references. Use it to type a parameter that
+receives a mounted component.
 
 ## Windows
 
-- `{ kind: "calendar", period: "day" | "week" | "month", timeZone: string, weekStartsOn?: "monday" | "sunday" }`
-- `{ kind: "rolling", durationMs: number }` — starts at first **allowed**
-  consume.
-- `{ kind: "epoch", durationMs: number }` — Unix epoch-aligned duration buckets.
-
-Calendar weeks default to Monday. Timezones are validated by `Intl`; invalid
-names throw `INVALID_TIME_ZONE`. Repeated midnight uses the earlier occurrence;
-skipped midnight/date advances through the gap. Days can have 23 or 25 hours.
-Durations must be positive safe integer milliseconds with a safely representable
-end timestamp (`INVALID_DURATION`).
-
-A `(scope, subjectRef, key)` has a fixed window policy. Changing kind, duration,
-calendar period, timezone spelling, or effective week start throws
-`POLICY_MISMATCH`, even after expiry. Use a new key for a new policy. Changing
-the limit does not reset usage. `periodKey` is an opaque window label, not an
-idempotency token; do not parse it or reuse it across keys, scopes, or erased
-rows.
-
-## Mutations
-
-### `consume(ctx, subjectRef, key, limit, window, opts?)`
-
-`opts: { scope?: string; amount?: number }`; amount defaults to 1. Returns
-`{ allowed: boolean, remaining: number, used: number, limit: number, periodKey: string, resetsAt: number }`.
-Denied calls do not write. A lower limit can return `used > limit` with zero
-remaining. Successful calls store the latest limit for refund calculations. Not
-idempotent: pair it with `@vllnt/convex-idempotency` in the same host mutation
-(see below).
-
-#### Making `consume` retry-safe
-
-Claim the request, consume, then complete the claim, all in one host mutation.
-The three steps commit or roll back together: a failed attempt leaves no claim
-and no usage, and a duplicate request returns the stored result without
-consuming. The tested host mutation is `play` in
-[`example/convex/example.ts`](https://github.com/vllnt/convex-quota/blob/main/example/convex/example.ts),
-and the README section "Retries and idempotency" shows it in full.
+### `WindowSpec`
 
 ```ts
-const key = `consume:${requestId}`; // namespaced per operation
-const claim = await consumeIdempotency.begin(ctx, key, { scope });
-if (claim.state === "done" && claim.result !== undefined) return claim.result;
-if (claim.state !== "fresh") throw new Error("Retry shortly");
-const result = await quota.consume(ctx, subjectRef, "plays", 5, daily);
-const done = await consumeIdempotency.complete(ctx, key, result, {
-  scope,
-  claimId: claim.claimId,
-});
-if (!done.recorded) throw new Error(`Claim lost: ${done.reason}`);
-return result;
+type WindowSpec =
+  | { kind: "epoch"; durationMs: number }
+  | { kind: "rolling"; durationMs: number }
+  | {
+      kind: "calendar";
+      period: "day" | "month" | "week";
+      timeZone: string;
+      weekStartsOn?: "monday" | "sunday";
+    };
 ```
 
-- Use a per-caller `scope` so one caller's `requestId` cannot replay another's.
-- Refunds are privileged; trigger them only from verified host events. Expose
-  the refund as an `internalMutation` fed from the host's own record of the play
-  (`subjectRef`, `requestId`, `periodKey`), deduplicated under a
-  `refund:${requestId}` key. A public refund endpoint lets callers fabricate
-  cancellations. See the README for the full recipe.
-- Namespace the key per operation (`consume:${requestId}`,
-  `refund:${requestId}`): the ledger is keyed by scope and key only, so a shared
-  key would replay another operation's stored result.
-- A denied consume is recorded and replayed as a denial.
-- The claim expires with the idempotency done-grace TTL (24 hours by default); a
-  retry after that consumes again.
-- Do no external work between `begin` and `complete`.
+- `calendar`: the local day, week or month in `timeZone`, an IANA name
+  validated by `Intl.DateTimeFormat` (`INVALID_TIME_ZONE`). Weeks start on
+  Monday unless `weekStartsOn: "sunday"`. Days are not always 24 hours (for example 23 or 25 on a DST change). A
+  repeated local midnight uses the earlier instant; a skipped midnight or date
+  advances through the gap.
+- `rolling`: starts at the first allowed `consume` and lasts `durationMs`; the
+  next allowed `consume` after it ends starts a new one.
+- `epoch`: buckets of `durationMs` aligned to the Unix epoch
+  (`floor(now / durationMs)`).
+- `durationMs` must be a positive safe integer, and the server time plus
+  `durationMs` must be a safe integer (`INVALID_DURATION`).
 
-### `refund(ctx, subjectRef, key, amount, periodKey, scope?)`
+The window policy of a `(scope, subjectRef, key)` is fixed. Changing the kind,
+`durationMs`, calendar `period`, `timeZone` spelling, or the effective week
+start of a `week` window throws `POLICY_MISMATCH` in `consume` and `remaining`,
+even after the window ended. Use a new `key` for a new policy. Changing `limit`
+does not reset usage.
 
-Returns `{ refunded: boolean, used: number, remaining: number }` in all cases.
-Subtracts amount, clamped at zero, only if the stored period matches and has not
-expired. Otherwise returns `refunded: false` and the stored row's
-usage/remaining (or zeros if absent); these are not a recomputed current-window
-allowance. Remaining uses the limit from the last successful consume, not a
-later query or denied call. A matching zero-usage row still returns
-`refunded: true`.
+`periodKey` is an opaque window label, not an idempotency token or receipt. Do
+not parse it, and do not reuse it across keys, scopes or erased rows.
 
-Privileged, **not idempotent**: repeated refunds subtract repeatedly. The host
-must authorize and deduplicate compensation events transactionally. Erasing and
-recreating the same calendar period can reuse a label: old refunds must not be
-replayed against it.
+## Component
 
-### `eraseSubject(ctx, subjectRef, scope?, batch?)`
+### `convex.config`
 
-Returns the number deleted **this pass**, not the total. Deletes up to batch
-rows (positive integer, default 200, capped at 500; `INVALID_BATCH` otherwise).
-Schedules another pass if full, including a possible final empty pass. Scope is
-always enforced. The host must quiesce writes until scheduled cleanup completes;
-there is no tombstone and a racing consume can survive or be swept. Monitor the
-Convex scheduler for failures. Component mutations are atomic within each pass,
-not across the whole sweep.
+```ts
+// convex/convex.config.ts
+import { defineApp } from "convex/server";
+import quota from "@vllnt/convex-quota/convex.config";
 
-## Queries
+const app = defineApp();
+app.use(quota);
+export default app;
+```
 
-### `remaining(ctx, subjectRef, key, limit, window, scope?)`
+The default export is `defineComponent("quota")`. Mount it more than once with
+`app.use(quota, { name: "webQuota" })`; each mount has its own tables and its
+own `components.<name>` reference. Runtime `scope` values isolate indexed reads
+and erasure inside one mount. One row per allowance means concurrent writes on
+the same key contend; different keys are independent. No usage history,
+receipts, logs or audit trail are stored.
 
-Returns
-`{ remaining: number, used: number, limit: number, periodKey: string, resetsAt: number }`.
-Computes the current window when the query runs; an expired row reads as zero
-usage without writing. A query does not start a rolling window. Time is
-server-sourced, but **time passing alone does not invalidate a cached
-query/subscription**. Treat resetsAt as an expiry hint and use consume for the
-authoritative decision. No timer or reset scheduler is installed.
+### `ComponentApi`
 
-## Isolation and operations
+`ComponentApi<Name extends string | undefined = string | undefined>` from
+`@vllnt/convex-quota/_generated/component.js` is the generated type of the
+mounted component's functions. `components.quota` in a host app has this type,
+and it is assignable to `QuotaComponent`.
 
-Mount multiple instances with `app.use(quota, { name: "webQuota" })` and
-`app.use(quota, { name: "mobileQuota" })`; each client receives its own
-generated component reference. Runtime scopes isolate indexed reads and erasures
-inside a mount. One row per allowance means hot-key writes contend; different
-keys are independent. No historical usage, receipts, logs or audit trail are
-stored. Host audit instrumentation should avoid exposing opaque refs or
-sensitive data.
+## Testing
 
-## Testing limits
+### `register`
 
-`pnpm test:coverage` runs convex-test's mock backend, including adversarial
-validation, civil-time transitions and scheduled-batch tests. It is not evidence
-of real Convex OCC retries or real scheduler delivery.
+`register(t: Pick<TestConvex<typeof schema>, "registerComponent">, name = "quota"): void`
+
+From `@vllnt/convex-quota/test`. Registers the component's schema and modules
+with a `convex-test` instance built from any host schema. It ships as
+TypeScript source and calls Vite's `import.meta.glob`, so the consuming app
+needs `convex-test`, `vitest` and `vite`; see the README section
+"Testing your app".
+
+The package's own tests run in `convex-test`'s in-memory backend, including
+adversarial input, civil-time transitions and scheduled erase batches. They do
+not prove real Convex OCC retries or real scheduler delivery.
+
+## Error codes
+
+| Code                | Message                                                                                   | Thrown by                                          |
+| ------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `INVALID_REF`       | `<name> must be 1..256 UTF-16 code units` for `subjectRef`, `key`, `scope` or `periodKey` | `consume`, `remaining`, `refund`, `eraseSubject`   |
+| `INVALID_LIMIT`     | `limit must be a positive safe integer`                                                   | `consume`, `remaining`                             |
+| `INVALID_AMOUNT`    | `amount must be a positive safe integer`                                                  | `consume`, `refund`                                |
+| `INVALID_DURATION`  | `durationMs must be a positive safe integer`                                              | `consume`, `remaining` (rolling and epoch windows) |
+| `INVALID_DURATION`  | `window end must be a positive safe integer`                                              | `consume`, `remaining` (rolling and epoch windows) |
+| `INVALID_TIME_ZONE` | the rejected `timeZone` value                                                             | `consume`, `remaining` (calendar windows)          |
+| `INVALID_BATCH`     | `batch must be a positive integer`                                                        | `eraseSubject`                                     |
+| `POLICY_MISMATCH`   | `Use a new key to change window policy`                                                   | `consume`, `remaining`                             |
+
+Read the code from `error.data.code` after checking
+`error instanceof ConvexError`.

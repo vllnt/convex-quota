@@ -15,6 +15,11 @@ export const MAX_ERASE_BATCH = 500;
 export type CalendarPeriod = "day" | "month" | "week";
 export type WeekStartsOn = "monday" | "sunday";
 
+/**
+ * Window policy for an allowance: a `calendar` day, week or month in an IANA
+ * `timeZone`, a `rolling` duration from the first allowed consume, or an
+ * `epoch`-aligned bucket. Fixed per `(scope, subjectRef, key)`.
+ */
 export type WindowSpec =
   | {
       durationMs: number;
