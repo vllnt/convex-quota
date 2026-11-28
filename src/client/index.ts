@@ -15,6 +15,10 @@ import type {
   WindowSpec,
 } from "./types.js";
 
+/**
+ * The component function references the client calls, matching
+ * `components.quota` (or another mount name) in the host app.
+ */
 export type QuotaComponent = {
   mutations: {
     consume: FunctionReference<
@@ -84,6 +88,8 @@ type RunMutationCtx = {
  * auth and meaning; it passes an opaque `subjectRef` + `key` and a window spec.
  * Never take `limit` from an end-user. Time is server-sourced. Consume is not
  * idempotent — wrap with `@vllnt/convex-idempotency` if retries must not double-count.
+ *
+ * @see https://oss.vllnt.com/packages/convex-quota
  */
 export class Quota {
   private readonly defaultScope: string;
@@ -99,6 +105,10 @@ export class Quota {
     return scope ?? this.defaultScope;
   }
 
+  /**
+   * Use `options.amount` (default 1) units of the current window if they fit
+   * under `limit`; a denied call writes nothing. Not idempotent.
+   */
   consume(
     ctx: RunMutationCtx,
     subjectRef: string,
@@ -117,6 +127,10 @@ export class Quota {
     });
   }
 
+  /**
+   * Read the current window's usage without writing. A subscription does not
+   * refresh when the window resets on its own.
+   */
   remaining(
     ctx: RunQueryCtx,
     subjectRef: string,
@@ -134,6 +148,10 @@ export class Quota {
     });
   }
 
+  /**
+   * Give `amount` units back, clamped at zero, if `periodKey` matches
+   * the stored, unexpired window. Privileged and not idempotent.
+   */
   refund(
     ctx: RunMutationCtx,
     subjectRef: string,
@@ -151,6 +169,11 @@ export class Quota {
     });
   }
 
+  /**
+   * Delete the subject's rows in `scope`, `batch` (default 200, max 500) per
+   * pass, scheduling more passes while a pass is full. Returns the first
+   * pass's count.
+   */
   eraseSubject(
     ctx: RunMutationCtx,
     subjectRef: string,

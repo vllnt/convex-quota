@@ -1,7 +1,7 @@
 {
   "name": "@vllnt/convex-quota",
   "version": "0.1.1",
-  "description": "Scheduled-reset per-subject allowances as a Convex component — calendar, rolling, or epoch windows with readable remaining",
+  "description": "TypeScript Convex component for quotas and allowances: daily, weekly, monthly, rolling or epoch reset windows per user or key, with a readable remaining count.",
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@10.34.9",
@@ -112,8 +112,15 @@
   "keywords": [
     "convex",
     "convex-component",
+    "typescript",
     "quota",
-    "rate-limit",
-    "allowance"
+    "allowance",
+    "usage-limits",
+    "daily-limit",
+    "monthly-limit",
+    "reset-window",
+    "rolling-window",
+    "free-tier",
+    "timezone"
   ]
 }

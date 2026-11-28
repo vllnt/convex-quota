@@ -1,58 +1,46 @@
 # @vllnt/convex-quota
 
-> Scheduled-reset per-subject allowances for Convex.
+> TypeScript Convex component for quotas and allowances: daily, weekly, monthly, rolling or epoch reset windows per user or key, with a readable remaining count.
 
-Targets Node >=22.12.0 and convex@^1.45.0. One sandboxed allowance row per
-(scope, subjectRef, key) stores used, limit, periodKey, policyKey and window times.
-Calendar windows support IANA timezones and day/week/month resets; rolling windows
-start on first allowed consume; epoch windows align to Unix epoch. A key's window
-policy cannot change (POLICY_MISMATCH); limits may change without resetting usage.
-Refs/scopes are 1..256 UTF-16 code units. Amounts/limits are positive safe integers.
-Durations are positive safe integer milliseconds with safe end timestamps.
+`@vllnt/convex-quota` is a Convex component (`convex@^1.45.0`, Node `>=22.12.0`, ESM only). It stores one sandboxed allowance row per `(scope, subjectRef, key)` with `used`, the last allowed `limit`, the `periodKey`, the window policy and the window start and end. The `Quota` client has `consume(ctx, subjectRef, key, limit, window, { amount?, scope? })` returning `{ allowed, used, remaining, limit, periodKey, resetsAt }`, `remaining(ctx, subjectRef, key, limit, window, scope?)` returning the same without `allowed`, `refund(ctx, subjectRef, key, amount, periodKey, scope?)` returning `{ refunded, used, remaining }`, and `eraseSubject(ctx, subjectRef, scope?, batch?)` returning the rows deleted in its first pass. Windows are `calendar` (`day`, `week` or `month` in an IANA `timeZone`, weeks start Monday unless `weekStartsOn: "sunday"`), `rolling` (starts at the first allowed consume) or `epoch` (`floor(now / durationMs)` buckets). Time is read on the server. Refs and scopes are 1 to 256 UTF-16 code units; limits, amounts and durations are positive safe integers. A key's window policy cannot change (`POLICY_MISMATCH`); its limit can. `consume` and `refund` are not idempotent: pair them with `@vllnt/convex-idempotency` in the same host mutation. `refund` only applies to the stored, unexpired `periodKey`, otherwise it returns `refunded: false`. `remaining` is a query snapshot: a subscription does not refresh when the window resets on its own. The host owns auth, the meaning of refs and keys, and every limit; the component owns the allowance row and the window math.
 
-consume(ctx, subjectRef, key, limit, window, opts?) returns allowed, used,
-remaining, limit, periodKey, resetsAt; opts is {amount?, scope?}.
-remaining(ctx, subjectRef, key, limit, window, scope?) returns the same without
-allowed. It is a query-execution snapshot: subscriptions do not refresh just
-because time passes. consume always rechecks server time.
-refund(ctx, subjectRef, key, amount, periodKey, scope?) returns refunded, used,
-remaining. Requires matching unexpired stored period; clamps usage at zero.
-Consume and refund are NOT idempotent; hosts must deduplicate events. A period
-label is not a receipt and can be reused after erasure.
-eraseSubject(ctx, subjectRef, scope?, batch?) returns this pass's deletion count;
-batches default to 200 and cap at 500, scheduling continuation when full. Hosts
-must stop concurrent writes while cleanup drains. No tombstones or audit history.
+## When to use
 
-Host owns auth, authorization and all policy. Multiple named mounts isolate data;
-runtime scopes isolate indexed reads/erasure within a mount. For general
-throttling (token buckets, fixed windows, React hooks) use the official
-@convex-dev/rate-limiter; use this component for scheduled-reset allowances with
-a readable remaining. Install `@vllnt/convex-quota`; stable releases are published
-to the `latest` dist-tag with npm provenance, unreleased builds from main go to
-`canary`. The sole client option is `defaultScope` (default `"global"`); consume
-amount defaults to 1.
+- Use it when a user, API key or tenant gets a number of actions per calendar day, week or month in a given IANA timezone, and the UI shows how many are left and when they reset.
+- Use it when an allowance resets on a rolling duration that starts at first use, or on fixed epoch-aligned buckets such as every hour.
+- Use it when a cancelled action should give its units back within the same window.
+- Do not use it for throttling or rate limiting of bursts: use `@convex-dev/rate-limiter`.
+- Do not use it when the count never resets: a balance that is spent and topped up (`@vllnt/convex-wallet`), or an API key's lifetime use limit (`@vllnt/convex-api-keys`).
+- Do not use it for billable usage records rolled up per billing period: use `@vllnt/convex-metering`.
 
 ## For coding agents
 
-The docs are bundled in the npm package at
-`node_modules/@vllnt/convex-quota/docs/`, with `README.md`, `CHANGELOG.md` and
-`llms.txt` in the package root and the TypeScript sources in `src/`. They match
-the installed version. Read them before writing code.
+Docs for the installed version ship in the package: `README.md`, `CHANGELOG.md`, this `llms.txt`, `docs/API.md` and typed `src/` under `node_modules/@vllnt/convex-quota/`. Read them before writing code.
 
 ## Docs
 
-- [README](./README.md): Setup, behavior, security, multi-mount and limitations
-- [API Reference](./docs/API.md): Exact signatures, results and error semantics
-- [Changelog](./CHANGELOG.md): Release notes
-- [License](./LICENSE): MIT
+- [README](./README.md): Install, quick start, API table, common tasks, errors, limits, compatibility
+- [API Reference](./docs/API.md): Exact signatures, defaults, result shapes and window rules
+- [Error codes](./docs/API.md#error-codes): Every `ConvexError` code, its message and which method throws it
+- [Errors and fixes](./README.md#errors-and-fixes): The same codes, with the cause and fix for each
+- [Changelog](./CHANGELOG.md): Version history and release notes
+- [License](./LICENSE): MIT license
 
-## Repository (not in the npm package)
+## Optional
 
-- [Contributing](https://github.com/vllnt/convex-quota/blob/main/CONTRIBUTING.md): Development workflow
+Repository only, not in the npm package:
+
 - [Example wrapper](https://github.com/vllnt/convex-quota/blob/main/example/convex/example.ts): Unauthenticated test fixtures, not production endpoints
-- [Tests](https://github.com/vllnt/convex-quota/blob/main/example/convex/example.test.ts): convex-test mock integration tests, not real OCC proof
-- [Security Policy](https://github.com/vllnt/convex-quota/blob/main/SECURITY.md): Reporting
+- [Example tests](https://github.com/vllnt/convex-quota/blob/main/example/convex/example.test.ts): `convex-test` integration tests, not real OCC proof
+- [Idempotency tests](https://github.com/vllnt/convex-quota/blob/main/example/convex/idempotency.test.ts): `consume` and `refund` made retry-safe with `@vllnt/convex-idempotency`
+- [Contributing](https://github.com/vllnt/convex-quota/blob/main/CONTRIBUTING.md): Development setup, validation commands, release workflow
+- [Security Policy](https://github.com/vllnt/convex-quota/blob/main/SECURITY.md): Vulnerability reporting policy
 
 ## Ecosystem
 
-- [vllnt oss](https://oss.vllnt.com/llms.txt): Index of vllnt open-source packages
+- [Package page](https://oss.vllnt.com/packages/convex-quota)
+- [Release feed](https://oss.vllnt.com/packages/convex-quota/rss.xml)
+- [All @vllnt packages](https://oss.vllnt.com/llms.txt)
+- [Search vllnt packages and docs](https://index.vllnt.com)
+- [vllnt](https://vllnt.com/llms.txt)
+- [Author](https://bntvllnt.com)
