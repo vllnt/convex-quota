@@ -6,6 +6,7 @@ for (const [name, script] of Object.entries(manifest.scripts)) {
   assert.doesNotMatch(name, /^(?:alpha|release|prepublishOnly)$/, `Unsafe release script: ${name}`);
   assert.doesNotMatch(script, /npm\s+(?:publish|login|version)|git\s+(?:push|tag)/, `Release bypass: ${name}`);
 }
+assert.match(manifest.scripts.lint, /(?:^|&& )pnpm check:docs(?: &&|$)/, "pnpm lint must run pnpm check:docs so CI checks the docs");
 const workflow = readFileSync(".github/workflows/publish.yml", "utf8");
 const stable = workflow.slice(workflow.indexOf("\n  release:"));
 assert.ok(stable.length > 100, "Stable job must exist");

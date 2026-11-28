@@ -63,7 +63,11 @@ trusted publishing and provenance; nothing is published from a local machine.
   existing version is never overwritten; verify registry state before retrying.
 - `pnpm check:release` checks this release contract. `pnpm check:pack` builds
   and checks the packed public exports and test helper against an unrelated host
-  schema using the locked installed dependencies.
+  schema using the locked installed dependencies, and type-checks every
+  TypeScript example in `README.md` and `docs/API.md` against the packed
+  package.
+- `pnpm check:docs` (part of `pnpm lint`) checks the README sections, links,
+  anchors, API table, errors table and `llms.txt` against the sources.
 
 ## Reporting Issues
 
