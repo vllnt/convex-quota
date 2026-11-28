@@ -1,6 +1,6 @@
 {
   "name": "@vllnt/convex-quota",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Scheduled-reset per-subject allowances as a Convex component — calendar, rolling, or epoch windows with readable remaining",
   "license": "MIT",
   "type": "module",

@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-28
+
 ### Added
 
 - The npm package's `llms.txt` and README tell coding agents that the docs are
