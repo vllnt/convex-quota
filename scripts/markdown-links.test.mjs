@@ -54,6 +54,11 @@ describe("extractLinks", () => {
     expect(extractLinks(markdown)).toEqual(["./after.md"]);
   });
 
+  test("keeps one level of balanced parentheses in a target", () => {
+    const markdown = "[Foo](https://en.wikipedia.org/wiki/Foo_(bar)) and [doc](./a_(b).md \"Title\").";
+    expect(extractLinks(markdown)).toEqual(["https://en.wikipedia.org/wiki/Foo_(bar)", "./a_(b).md"]);
+  });
+
   test("returns nothing for text without links", () => {
     expect(extractLinks("Plain [brackets] and (parens).")).toEqual([]);
   });

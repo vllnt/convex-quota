@@ -3,8 +3,9 @@
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 const CODE_SPAN = /(`+)[^`]*?\1/g;
 const TITLE = String.raw`(?:\s+(?:"[^"\n]*"|'[^'\n]*'|\([^)\n]*\)))?`;
-// `[text](target "title")`, also matching images `![alt](target)`.
-const INLINE = new RegExp(String.raw`\]\(\s*(<[^>\n]*>|[^\s()<>]+)${TITLE}\s*\)`, "g");
+// `[text](target "title")`, also matching images `![alt](target)`. A bare
+// target may hold one level of balanced parentheses, e.g. `Foo_(bar)`.
+const INLINE = new RegExp(String.raw`\]\(\s*(<[^>\n]*>|(?:[^\s()<>]|\([^\s()<>]*\))+)${TITLE}\s*\)`, "g");
 // `[label]: target "title"`; `[^note]:` is a footnote, not a link.
 const DEFINITION = new RegExp(String.raw`^ {0,3}\[(?!\^)[^\]\n]+\]:[ \t]*(<[^>\n]*>|\S+)${TITLE}[ \t]*$`, "gm");
 
