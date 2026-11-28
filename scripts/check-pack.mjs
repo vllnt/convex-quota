@@ -44,11 +44,20 @@ new Quota(api);
 void component;
 `);
   writeFileSync(join(temporary, "package.json"), JSON.stringify({ type: "module" }));
-  // Consumers resolve the shipped TypeScript sources under both resolution modes.
+  // A strict consumer resolves the shipped TypeScript sources under both resolution modes.
   for (const [module, moduleResolution] of [["ESNext", "Bundler"], ["NodeNext", "NodeNext"]]) {
-    run(resolve(root, "node_modules/.bin/tsc"), ["--ignoreConfig", "--noEmit", "--module", module, "--moduleResolution", moduleResolution, "--target", "ES2024", "--skipLibCheck", "check.ts"], temporary);
+    run(resolve(root, "node_modules/.bin/tsc"), ["--ignoreConfig", "--noEmit", "--strict", "--exactOptionalPropertyTypes", "--module", module, "--moduleResolution", moduleResolution, "--target", "ES2024", "--skipLibCheck", "check.ts"], temporary);
   }
-  run(process.execPath, ["--input-type=module", "-e", "import {Quota} from '@vllnt/convex-quota'; if(typeof Quota !== 'function') throw Error('Missing Quota');"], temporary);
+  // Every runtime entry point loads in plain Node; the types-only and .ts entries are covered by tsc above.
+  run(process.execPath, ["--input-type=module", "-e", [
+    "import { Quota } from '@vllnt/convex-quota';",
+    "if (typeof Quota !== 'function') throw Error('Missing Quota');",
+    "for (const entry of ['@vllnt/convex-quota/convex.config', '@vllnt/convex-quota/convex.config.js']) {",
+    "  const { default: config } = await import(entry);",
+    "  if (typeof config !== 'object' || config === null) throw Error(`${entry} default export is not an object`);",
+    "}",
+    "import.meta.resolve('@vllnt/convex-quota/package.json');",
+  ].join("\n")], temporary);
   const examples = checkDocExamples(packed, temporary);
   console.log(`PASS packed files, llms.txt links, runtime exports, unrelated-host test helper typing and ${examples} doc examples`);
 } finally {
