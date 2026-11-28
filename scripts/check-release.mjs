@@ -9,6 +9,10 @@ for (const [name, script] of Object.entries(manifest.scripts)) {
 const workflow = readFileSync(".github/workflows/publish.yml", "utf8");
 const stable = workflow.slice(workflow.indexOf("\n  release:"));
 assert.ok(stable.length > 100, "Stable job must exist");
+const canaryAt = workflow.indexOf("\n  canary:");
+assert.ok(canaryAt > 0, "Canary job must exist");
+const quality = workflow.slice(0, canaryAt);
+assert.match(quality, /- run: pnpm check:pack\n/, "Publish quality gates must run pnpm check:pack");
 assert.match(stable, /startsWith\(github\.ref, 'refs\/tags\/v'\)/);
 assert.match(stable, /git merge-base --is-ancestor/);
 assert.match(stable, /--provenance/);
