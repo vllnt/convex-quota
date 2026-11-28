@@ -3,6 +3,8 @@ import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 
+import { extractLinks } from "./markdown-links.mjs";
+
 const root = process.cwd();
 const temporary = mkdtempSync(join(tmpdir(), "quota-pack-"));
 const run = (command, args, cwd = root) => execFileSync(command, args, { cwd, stdio: "inherit" });
@@ -18,7 +20,7 @@ try {
   const missing = required.filter((file) => !existsSync(join(packed, file)));
   if (missing.length > 0) throw new Error(`Tarball is missing required files: ${missing.join(", ")}`);
   // Every non-URL llms.txt link must be "./path" to a file inside the tarball.
-  const links = [...readFileSync(join(packed, "llms.txt"), "utf8").matchAll(/\]\(([^)]+)\)/g)].map((match) => match[1].split("#")[0]).filter((link) => link && !/^[a-z][a-z\d+.-]*:/i.test(link));
+  const links = extractLinks(readFileSync(join(packed, "llms.txt"), "utf8")).map((link) => link.split("#")[0]).filter((link) => link && !/^[a-z][a-z\d+.-]*:/i.test(link));
   const broken = links.filter((link) => { const target = resolve(packed, link); return !link.startsWith("./") || relative(packed, target).startsWith("..") || !existsSync(target) || !statSync(target).isFile(); });
   if (links.length === 0 || broken.length > 0) throw new Error(`llms.txt relative links missing from tarball: ${broken.join(", ") || "none found"}`);
   mkdirSync(join(temporary, "node_modules/@vllnt"), { recursive: true });

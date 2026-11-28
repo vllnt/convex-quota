@@ -79,3 +79,4 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm check:pack
+      - run: bash scripts/test-check-package-contents.sh
