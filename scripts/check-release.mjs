@@ -19,6 +19,7 @@ assert.match(stable, /--provenance/);
 assert.doesNotMatch(stable, /inputs\.bump|npm version|git (?:commit|push)/);
 assert.doesNotMatch(workflow, /NODE_AUTH_TOKEN: \$\{\{/);
 assert.match(workflow, /cancel-in-progress: false/);
+assert.match(readFileSync(".github/workflows/ci.yml", "utf8"), /- run: bash scripts\/test-check-package-contents\.sh\n/, "CI must run scripts/test-check-package-contents.sh");
 const contributing = readFileSync("CONTRIBUTING.md", "utf8");
 assert.doesNotMatch(contributing, /pnpm (?:release|alpha)|dispatch.*patch\/minor\/major|RELEASE_ENABLED/);
 console.log("PASS tag-driven release contract");
